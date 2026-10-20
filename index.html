@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mustela Expo POS</title>
+<meta name="robots" content="noindex">
+<style>
+/* Brand fonts, self-hosted (SIL OFL) so the booth works on weak venue Wi-Fi */
+@font-face{font-family:"Taviraj";font-weight:300;font-display:swap;src:url(fonts/taviraj-latin-300-normal.woff2) format("woff2")}
+@font-face{font-family:"Work Sans";font-weight:400;font-display:swap;src:url(fonts/work-sans-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:"Work Sans";font-weight:600;font-display:swap;src:url(fonts/work-sans-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:"Work Sans";font-weight:700;font-display:swap;src:url(fonts/work-sans-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:"Work Sans";font-weight:800;font-display:swap;src:url(fonts/work-sans-latin-800-normal.woff2) format("woff2")}
+/* Layout: tablet-first kiosk screens with a soft clinical-nursery palette; staff screens are dense two-column work views */
+:root{
+  /* Mustela brand: Bleu M + white; soft palette for surfaces (Play Book › Colors) */
+  --bleu:#004D9D;
+  --bg:#ffffff; --surface:#ffffff; --raised:#E1F3FA; --ink:#004D9D; --muted:#4F6C93; --line:#C8D8EC;
+  --accent:#004D9D; --accent-ink:#ffffff; --soft:#E1F3FA; --blush:#F1D9CD; --blush-ink:#004D9D;
+  --ok:#3D6944; --ok-soft:#D0DEBB; --warn:#7A5300; --warn-soft:#FFF3B7; --bad:#B23A33; --bad-soft:#FBE2E0;
+  --display:"Taviraj", Georgia, "Times New Roman", serif;
+  --body:"Work Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --r:16px;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45;-webkit-tap-highlight-color:transparent}
+section{position:relative}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 40px;max-width:1280px;margin:0 auto}
+h1,h2,h3{margin:0;text-wrap:balance}
+h1{font-family:var(--display);font-weight:300;letter-spacing:-.01em;font-size:clamp(28px,4vw,40px);line-height:1.1}
+h2{font-family:var(--display);font-weight:300;font-size:26px}
+h1 b,h2 b{font-family:var(--body);font-weight:800;letter-spacing:-.02em}
+h3{font-size:17px;font-weight:700}
+.muted{color:var(--muted)}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.num{font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 22px;border-radius:999px;font-weight:700;background:var(--soft);color:var(--ink);border:2px solid transparent}
+.btn.primary{background:var(--accent);color:var(--accent-ink)}
+.btn.ok{background:var(--ok);color:#fff}
+.btn.danger{background:var(--bad-soft);color:var(--bad)}
+.btn.ghost{background:transparent;border:2px solid var(--bleu);color:var(--bleu)}
+.btn.big{min-height:60px;font-size:18px;padding:0 28px}
+.btn.sm{min-height:36px;padding:0 14px;font-size:14px}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+input,select{font:inherit;color:var(--ink);background:var(--surface);border:1.5px solid var(--line);border-radius:10px;min-height:50px;padding:0 14px;width:100%}
+input[type=checkbox]{width:24px;height:24px;min-height:0;accent-color:var(--accent);flex:none;margin:0}
+label.f{display:grid;gap:6px;font-weight:600;font-size:15px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.check{display:flex;gap:12px;align-items:flex-start;font-size:15px;cursor:pointer}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:20px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.03em}
+.p-pend{background:var(--warn-soft);color:var(--warn)} .p-paid{background:var(--soft);color:var(--accent)}
+.p-ready{background:var(--ok-soft);color:var(--ok)} .p-done{background:var(--raised);color:var(--muted)} .p-cancel{background:var(--bad-soft);color:var(--bad)}
+.banner{border-radius:12px;padding:12px 16px;font-weight:600;font-size:15px}
+.banner.warn{background:var(--warn-soft);color:var(--warn)} .banner.bad{background:var(--bad-soft);color:var(--bad)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:12px 20px;border-radius:999px;font-weight:600;z-index:50;max-width:calc(100% - 32px);text-align:center}
+
+/* staff nav */
+.topbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand .mark{font-family:var(--body);font-weight:800;font-size:24px;letter-spacing:-.02em}
+.brand img,.klogo img{height:32px;width:auto;display:block}
+.klogo{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px));font-weight:800;font-size:22px;letter-spacing:-.02em}
+.swoosh{display:block;width:min(220px,60%);height:auto;color:var(--bleu);margin:-6px auto 0}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{padding:8px 14px;border-radius:999px;font-weight:600;font-size:14px;color:var(--muted)}
+.tab{border:2px solid transparent}
+.tab[aria-current="true"]{border-color:var(--bleu);color:var(--bleu)}
+
+/* launcher */
+.launch{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-top:24px}
+.ltile{text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:22px;display:grid;gap:8px}
+.ltile:hover{border-color:var(--accent);background:var(--soft)}
+.ltile b{font-family:var(--display);font-weight:300;font-size:28px}
+
+/* kiosk */
+.khead{padding-top:36px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px}
+.cats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+.chip{padding:10px 18px;border-radius:999px;background:var(--surface);border:2px solid var(--bleu);color:var(--bleu);font-weight:600}
+.chip[aria-pressed="true"]{background:var(--bleu);color:#fff}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;padding-bottom:110px}
+.pcard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.pcard.in{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
+.pcard.out{opacity:.55}
+.pc-top{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--muted);font-weight:600}
+.pc-line{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--bleu);background:var(--blush);border-radius:6px;padding:2px 8px;align-self:flex-start}
+.pcard h3{font-size:18px;line-height:1.25;flex:1}
+.pc-bot{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.price{font-size:20px;font-weight:800}
+.stepper{display:flex;align-items:center;gap:4px;background:var(--raised);border-radius:999px;padding:4px}
+.stepper button{width:44px;height:44px;border-radius:999px;font-size:22px;font-weight:700;background:var(--surface);border:1px solid var(--line)}
+.stepper button.add{background:var(--accent);color:var(--accent-ink);border:0}
+.stepper span{min-width:28px;text-align:center;font-weight:800;font-size:18px}
+.cartbar{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--ink);color:var(--bg);padding:14px max(16px,env(safe-area-inset-right,0px)) calc(14px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.cartbar .in{max-width:1280px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.cartbar .btn.primary{background:var(--bg);color:var(--ink)}
+.checkout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:20px;align-items:start}
+@media (max-width:820px){.checkout{grid-template-columns:1fr}}
+.lines{display:grid;gap:10px}
+.line{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.line .nm{min-width:0}
+.total{display:flex;justify-content:space-between;border-top:1.5px dashed var(--line);padding-top:12px;margin-top:6px;font-size:22px;font-weight:800}
+.community{background:var(--soft);border-radius:12px;padding:16px;display:grid;gap:14px}
+.done{text-align:center;padding:48px 16px;display:grid;gap:18px;justify-items:center}
+.code{font-family:var(--body);font-weight:800;font-size:clamp(72px,16vw,140px);line-height:1;letter-spacing:.04em;color:var(--accent)}
+.stafflink{position:fixed;left:max(10px,env(safe-area-inset-left,0px));top:calc(10px + env(safe-area-inset-top,0px));font-size:12px;color:var(--muted);opacity:.5;padding:6px 10px;z-index:30}
+body.kiosk-cart .stafflink{display:none}
+
+/* community */
+.comm{padding-top:36px;max-width:760px;margin:0 auto;display:grid;gap:20px}
+.stage{display:flex;flex-wrap:wrap;gap:8px}
+.stage label{cursor:pointer}
+.stage input{position:absolute;opacity:0;width:1px;height:1px}
+.stage span{display:inline-block;padding:12px 16px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);font-weight:600}
+.stage input:checked + span{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.stage input:focus-visible + span{outline:3px solid var(--accent);outline-offset:2px}
+
+/* caja */
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:20px;align-items:start}
+@media (max-width:900px){.two{grid-template-columns:1fr}}
+.olist{display:grid;gap:8px;max-height:65vh;overflow:auto}
+.orow{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;width:100%;padding:12px 14px;border-radius:12px;background:var(--raised);border:1.5px solid transparent}
+.orow[aria-pressed="true"]{border-color:var(--accent);background:var(--soft)}
+.orow .c{font-weight:800;font-size:22px}
+.methods{display:flex;gap:8px;flex-wrap:wrap}
+.methods button{padding:12px 18px;border-radius:12px;border:1.5px solid var(--line);font-weight:700;background:var(--surface)}
+.methods button[aria-pressed="true"]{background:var(--bleu);color:#fff;border-color:var(--bleu)}
+.mini-step{display:inline-flex;gap:4px;align-items:center}
+.mini-step button{width:32px;height:32px;border-radius:8px;border:1px solid var(--line);font-weight:800;background:var(--surface)}
+.empty{padding:28px 12px;text-align:center;color:var(--muted)}
+
+/* surtido */
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;align-items:start}
+.colh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+.ticket{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;gap:12px;margin-bottom:12px}
+.ticket .th{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ticket .c{font-weight:800;font-size:34px;line-height:1}
+.ticket ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.ticket li label{display:flex;gap:10px;align-items:center;cursor:pointer;font-size:16px}
+.ticket li .q{font-weight:800;min-width:30px}
+
+/* inventario */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:20px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.tile b{display:block;font-size:28px;font-weight:800;margin-top:4px}
+.tscroll{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:860px;font-size:14px}
+th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--raised)}
+td.r,th.r{text-align:right}
+td input{min-height:38px;padding:0 8px;font-size:14px}
+td input.n{width:90px;text-align:right}
+.lowstock{color:var(--bad);font-weight:800}
+.section{display:grid;gap:14px;margin-top:28px}
+.pinpad{position:fixed;inset:0;background:rgba(0,40,90,.45);z-index:60;display:grid;place-items:center;padding:16px}
+.pinbox{background:var(--surface);border-radius:18px;padding:24px;width:min(360px,100%);display:grid;gap:14px}
+@media (prefers-reduced-motion:no-preference){.pcard,.orow,.chip,.btn{transition:background .15s,border-color .15s,box-shadow .15s}}
+
+/* v2 additions */
+a{color:var(--accent)}
+.who{display:flex;align-items:center;gap:10px;font-size:14px}
+.login{max-width:420px;margin:8vh auto 0;display:grid;gap:16px}
+.chkrow{display:flex;flex-wrap:wrap;gap:10px 20px}
+</style>
+</head>
+<body>
+
+<div id="toast" class="toast" hidden></div>
+<button id="staffLink" class="stafflink" hidden>Personal</button>
+
+<div id="pin" class="pinpad" hidden>
+  <form id="pinForm" class="pinbox">
+    <h2>Acceso de personal</h2>
+    <label class="f">PIN
+      <input id="pinInput" inputmode="numeric" autocomplete="off" type="password" maxlength="8">
+    </label>
+    <p id="pinErr" class="muted" hidden>PIN incorrecto. Intenta de nuevo.</p>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button type="button" class="btn ghost" id="pinCancel">Cancelar</button>
+      <button class="btn primary">Entrar</button>
+    </div>
+  </form>
+</div>
+
+<div class="wrap">
+  <div id="dbBanner" class="banner bad" hidden style="margin-bottom:16px">No hay conexión con la base de datos. Revisa el internet del dispositivo (o el archivo config.js).</div>
+
+  <!-- STAFF TOP BAR -->
+  <header id="topbar" class="topbar" hidden>
+    <div class="brand"><span class="mark logo-slot">Mustela</span><span class="eyebrow" id="eventName">Expo</span></div>
+    <nav class="tabs" id="tabs">
+      <button class="tab" data-go="caja">Caja</button>
+      <button class="tab" data-go="surtido">Surtido</button>
+      <button class="tab" data-go="inventario">Inventario</button>
+      <button class="tab" data-go="tienda">Tienda (tablet)</button>
+      <button class="tab" data-go="comunidad">Comunidad (tablet)</button>
+      <button class="tab" data-go="inicio">Pantallas</button>
+    </nav>
+    <div class="who" id="who" hidden><span class="muted" id="whoEmail"></span><button class="btn sm ghost" id="logout">Salir</button></div>
+  </header>
+
+  <!-- LOGIN -->
+  <section id="v-login" hidden>
+    <form id="loginForm" class="panel login" novalidate>
+      <div><p class="eyebrow">Mustela · Personal</p><h1>Inicia <b>sesión</b></h1>
+      <p class="muted" id="loginWhy">Caja, Surtido e Inventario son solo para el equipo.</p></div>
+      <label class="f">Correo<input id="l-email" type="email" inputmode="email" autocomplete="username"></label>
+      <label class="f">Contraseña<input id="l-pass" type="password" autocomplete="current-password"></label>
+      <p id="loginErr" class="banner bad" hidden></p>
+      <div style="display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap">
+        <button type="button" class="btn ghost" id="loginBack">← Pantallas</button>
+        <button class="btn primary" id="loginBtn">Entrar</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- LAUNCHER -->
+  <section id="v-inicio" hidden>
+    <p class="eyebrow">Configuración del dispositivo</p>
+    <h1>¿Qué pantalla será <b>este dispositivo</b>?</h1>
+    <p class="muted">Elige una vez por tablet o computadora. Todas las pantallas comparten pedidos e inventario en tiempo real.</p>
+    <div class="launch">
+      <button class="ltile" data-go="tienda"><span class="eyebrow">Mesas · clientes</span><b>Tienda</b><span class="muted">Los clientes eligen productos, dejan sus datos y reciben un número de pedido.</span></button>
+      <button class="ltile" data-go="comunidad"><span class="eyebrow">Mesas · clientes</span><b>Comunidad</b><span class="muted">Registro a la Comunidad Mustela sin compra.</span></button>
+      <button class="ltile" data-go="caja"><span class="eyebrow">Personal</span><b>Caja</b><span class="muted">Busca el número, cobra en la terminal y envía el pedido a surtido.</span></button>
+      <button class="ltile" data-go="surtido"><span class="eyebrow">Personal</span><b>Surtido</b><span class="muted">Pedidos pagados por preparar y entregar.</span></button>
+      <button class="ltile" data-go="inventario"><span class="eyebrow">Personal</span><b>Inventario</b><span class="muted">Productos, precios, stock, ventas y exportes.</span></button>
+    </div>
+  </section>
+
+  <!-- TIENDA -->
+  <section id="v-tienda" hidden>
+    <span class="klogo logo-slot" aria-label="Mustela">Mustela</span>
+    <div id="k-shop">
+      <div class="khead">
+        <div>
+          <p class="eyebrow">Mustela · Arma tu pedido</p>
+          <h1>Elige tus <b>productos</b></h1>
+          <p class="muted">Toca + para agregar. Al terminar, deja tus datos y pasa a caja con tu número.</p>
+        </div>
+        <button class="btn ghost" data-go="comunidad">Solo quiero unirme a la Comunidad</button>
+      </div>
+      <div class="cats" id="cats"></div>
+      <div class="pgrid" id="pgrid"></div>
+    </div>
+
+    <form id="k-form" hidden novalidate>
+      <div class="khead">
+        <div><p class="eyebrow">Paso 2 de 2</p><h1>Tus <b>datos</b></h1></div>
+        <button type="button" class="btn ghost" id="backShop">← Seguir comprando</button>
+      </div>
+      <div class="checkout">
+        <div class="panel">
+          <h2 style="margin-bottom:14px">Tu <b>pedido</b></h2>
+          <div class="lines" id="sumLines"></div>
+          <div class="total num"><span>Total</span><span id="sumTotal"></span></div>
+          <p class="muted" style="font-size:14px;margin:12px 0 0">Pagas en caja con tarjeta o efectivo.</p>
+        </div>
+        <div class="panel" style="display:grid;gap:16px">
+          <div class="grid2">
+            <label class="f">Nombre<input id="c-nombre" autocomplete="off" required></label>
+            <label class="f">Apellido<input id="c-apellido" autocomplete="off"></label>
+            <label class="f">Celular (10 dígitos)<input id="c-tel" inputmode="tel" autocomplete="off" required></label>
+            <label class="f">Correo<input id="c-email" type="email" inputmode="email" autocomplete="off"></label>
+          </div>
+          <div class="community">
+            <label class="check"><input type="checkbox" id="c-join" checked><span><b>Quiero unirme a la Comunidad Mustela</b><br><span class="muted">Consejos para el cuidado de la piel de tu bebé, lanzamientos y beneficios exclusivos.</span></span></label>
+            <div id="c-joinFields" class="grid2">
+              <label class="f">Etapa
+                <select id="c-etapa"><option value="">Selecciona…</option><option>Estoy embarazada</option><option>Bebé de 0 a 12 meses</option><option>Niño de 1 a 3 años</option><option>Niño de 3 años o más</option><option>Otro</option></select>
+              </label>
+              <label class="f">Ciudad<input id="c-ciudad" autocomplete="off"></label>
+              <div class="chkrow" style="grid-column:1/-1">
+                <label class="check"><input type="checkbox" id="c-wa" checked><span>Mensajes por WhatsApp</span></label>
+                <label class="check"><input type="checkbox" id="c-mail" checked><span>Correos</span></label>
+              </div>
+            </div>
+          </div>
+          <label class="check"><input type="checkbox" id="c-priv"><span>Acepto el <span class="privlink">aviso de privacidad</span> y el uso de mis datos para procesar mi pedido<span id="c-privJoin"> y recibir comunicaciones de Mustela</span>.</span></label>
+          <p id="formErr" class="banner bad" hidden></p>
+          <button class="btn primary big" id="submitOrder">Confirmar pedido</button>
+        </div>
+      </div>
+    </form>
+
+    <div id="k-done" class="done" hidden>
+      <p class="eyebrow">Pedido registrado</p>
+      <h1 id="doneName">¡Gracias!</h1>
+      <p class="muted" style="font-size:18px;margin:0">Tu número de pedido es</p>
+      <div><div class="code" id="doneCode">—</div><svg class="swoosh" viewBox="0 0 220 18" aria-hidden="true"><path d="M4 10 C 60 17, 160 17, 216 6" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/></svg></div>
+      <p style="font-size:20px;margin:0">Pasa a <b>caja</b> y muestra este número para pagar <b id="doneTotal"></b>.</p>
+      <button class="btn primary big" id="newOrder">Nuevo pedido</button>
+      <p class="muted" id="doneTimer"></p>
+    </div>
+  </section>
+
+  <!-- COMUNIDAD -->
+  <section id="v-comunidad" hidden>
+    <span class="klogo logo-slot" aria-label="Mustela">Mustela</span>
+    <form id="m-form" class="comm" novalidate>
+      <div>
+        <p class="eyebrow">Comunidad Mustela</p>
+        <h1>Únete a la <b>comunidad</b></h1>
+        <p class="muted">Recibe consejos de especialistas, novedades y beneficios para el cuidado de la piel de tu familia.</p>
+      </div>
+      <div class="panel" style="display:grid;gap:16px">
+        <div class="grid2">
+          <label class="f">Nombre<input id="m-nombre" autocomplete="off"></label>
+          <label class="f">Apellido<input id="m-apellido" autocomplete="off"></label>
+          <label class="f">Celular (10 dígitos)<input id="m-tel" inputmode="tel" autocomplete="off"></label>
+          <label class="f">Correo<input id="m-email" type="email" inputmode="email" autocomplete="off"></label>
+        </div>
+        <div style="display:grid;gap:8px">
+          <span class="f" style="font-weight:600">¿En qué etapa estás?</span>
+          <div class="stage" id="m-etapa">
+            <label><input type="radio" name="etapa" value="Estoy embarazada"><span>Estoy embarazada</span></label>
+            <label><input type="radio" name="etapa" value="Bebé de 0 a 12 meses"><span>Bebé de 0 a 12 meses</span></label>
+            <label><input type="radio" name="etapa" value="Niño de 1 a 3 años"><span>Niño de 1 a 3 años</span></label>
+            <label><input type="radio" name="etapa" value="Niño de 3 años o más"><span>3 años o más</span></label>
+            <label><input type="radio" name="etapa" value="Otro"><span>Otro</span></label>
+          </div>
+        </div>
+        <label class="f">Ciudad<input id="m-ciudad" autocomplete="off"></label>
+        <div style="display:grid;gap:10px">
+          <label class="check"><input type="checkbox" id="m-wa" checked><span>Quiero recibir mensajes por WhatsApp</span></label>
+          <label class="check"><input type="checkbox" id="m-mail" checked><span>Quiero recibir correos</span></label>
+          <label class="check"><input type="checkbox" id="m-priv"><span>Acepto el <span class="privlink">aviso de privacidad</span> y el uso de mis datos para recibir comunicaciones de Mustela.</span></label>
+        </div>
+        <p id="mErr" class="banner bad" hidden></p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between">
+          <button type="button" class="btn ghost" data-go="tienda">Ir a comprar</button>
+          <button class="btn primary big" id="mSubmit">Registrarme</button>
+        </div>
+      </div>
+    </form>
+    <div id="m-done" class="done" hidden>
+      <p class="eyebrow">Comunidad Mustela</p>
+      <h1 id="mDoneName">¡Bienvenida!</h1>
+      <p style="font-size:20px;margin:0">Ya eres parte de la comunidad. Pronto recibirás noticias nuestras.</p>
+      <button class="btn primary big" id="mAgain">Listo</button>
+    </div>
+  </section>
+
+  <!-- CAJA -->
+  <section id="v-caja" hidden>
+    <div class="two">
+      <div class="panel" style="display:grid;gap:12px">
+        <div class="colh"><h2>Por cobrar</h2><span class="pill p-pend num" id="pendCount">0</span></div>
+        <input id="cajaSearch" placeholder="Buscar número o nombre" autocomplete="off">
+        <div class="olist" id="pendList"></div>
+        <details>
+          <summary class="muted" style="cursor:pointer;font-weight:600">Cobrados recientes</summary>
+          <div class="olist" id="paidList" style="margin-top:8px"></div>
+        </details>
+      </div>
+      <div class="panel" style="display:grid;gap:16px">
+        <div id="cajaEmpty" class="empty">Selecciona un pedido de la lista o búscalo por número.</div>
+        <div id="cajaDetail" hidden style="display:grid;gap:16px"></div>
+        <div id="payPanel" hidden style="display:grid;gap:14px">
+          <div><p class="eyebrow" style="margin:0 0 8px">Forma de pago</p>
+            <div class="methods" id="methods">
+              <button type="button" data-m="Tarjeta">Tarjeta</button>
+              <button type="button" data-m="Efectivo">Efectivo</button>
+              <button type="button" data-m="Transferencia">Transferencia</button>
+            </div>
+          </div>
+          <div class="grid2">
+            <label class="f" id="refWrap">Referencia / autorización<input id="payRef" autocomplete="off" placeholder="Opcional"></label>
+            <label class="f" id="cashWrap" hidden>Efectivo recibido<input id="cashIn" inputmode="decimal" autocomplete="off"></label>
+          </div>
+          <p id="change" class="num" hidden style="margin:0;font-size:18px;font-weight:700"></p>
+          <p id="payErr" class="banner bad" hidden></p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between">
+            <span id="cancelArea"><button type="button" class="btn danger" id="cancelBtn">Cancelar pedido</button></span>
+            <button type="button" class="btn ok big" id="payBtn" disabled>Cobrado · enviar a surtido</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SURTIDO -->
+  <section id="v-surtido" hidden>
+    <div class="cols">
+      <div><div class="colh"><h2>Por surtir</h2><span class="pill p-paid num" id="cntPaid">0</span></div><div id="colPaid"></div></div>
+      <div><div class="colh"><h2>Listos para entregar</h2><span class="pill p-ready num" id="cntReady">0</span></div><div id="colReady"></div></div>
+    </div>
+    <p class="muted" id="cntDone" style="margin-top:12px"></p>
+  </section>
+
+  <!-- INVENTARIO -->
+  <section id="v-inventario" hidden>
+    <div id="sampleNote" class="banner warn" hidden style="margin-bottom:16px">Los productos marcados “Ejemplo” son de muestra. Edita nombre, precio y stock o reemplázalos por el catálogo real antes del evento.</div>
+    <div class="tiles" id="tiles"></div>
+    <div class="colh"><h2>Productos</h2><span class="muted" style="font-size:14px">Disponible = stock − vendido − apartado en pedidos sin cobrar</span></div>
+    <div class="tscroll" id="invWrap"><table><thead><tr><th>Producto</th><th>Línea</th><th>Tamaño</th><th class="r">Precio</th><th class="r">Stock</th><th class="r">Vendido</th><th class="r">Apartado</th><th class="r">Disponible</th><th>Visible</th></tr></thead><tbody id="invBody"></tbody></table></div>
+
+    <form id="addForm" class="panel section" novalidate>
+      <h3>Agregar producto</h3>
+      <div class="grid2">
+        <label class="f">Nombre<input id="a-name" autocomplete="off"></label>
+        <label class="f">Línea / categoría<input id="a-cat" autocomplete="off" list="catList"></label>
+        <label class="f">Tamaño<input id="a-size" autocomplete="off" placeholder="300 ml"></label>
+        <label class="f">Precio (MXN)<input id="a-price" inputmode="decimal" autocomplete="off"></label>
+        <label class="f">Stock inicial<input id="a-stock" inputmode="numeric" autocomplete="off"></label>
+      </div>
+      <datalist id="catList"></datalist>
+      <div><button class="btn primary">Agregar</button></div>
+    </form>
+
+    <div class="section">
+      <h2>Exportar</h2>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn" id="expOrders">Pedidos (CSV)</button>
+        <button class="btn" id="expMembers">Comunidad (CSV)</button>
+      </div>
+      <p class="muted" id="expNote" style="margin:0;font-size:14px"></p>
+    </div>
+
+    <div class="section">
+      <h2>Comunidad · últimos registros</h2>
+      <div class="tscroll"><table><thead><tr><th>Fecha</th><th>Nombre</th><th>Celular</th><th>Correo</th><th>Etapa</th><th>Ciudad</th><th>Origen</th></tr></thead><tbody id="memBody"></tbody></table></div>
+    </div>
+
+    <form id="cfgForm" class="panel section" novalidate>
+      <h3>Ajustes</h3>
+      <div class="grid2">
+        <label class="f">Nombre del evento<input id="cfg-event" autocomplete="off"></label>
+        <label class="f">PIN de personal (salir de las tablets)<input id="cfg-pin" inputmode="numeric" autocomplete="off" maxlength="8"></label>
+        <label class="f">Liga al aviso de privacidad<input id="cfg-priv" type="url" autocomplete="off" placeholder="https://…"></label>
+        <label class="f">Minutos que se aparta un pedido sin cobrar<input id="cfg-hold" inputmode="numeric" autocomplete="off"></label>
+      </div>
+      <div><button class="btn primary">Guardar ajustes</button></div>
+    </form>
+  </section>
+</div>
+
+<div id="cartbar" class="cartbar" hidden>
+  <div class="in">
+    <div><div id="cbCount" style="font-weight:700"></div><div id="cbTotal" class="num" style="font-size:22px;font-weight:800"></div></div>
+    <div style="display:flex;gap:10px">
+      <button class="btn ghost" id="cbClear" style="color:inherit;border-color:rgba(255,255,255,.35)">Vaciar</button>
+      <button class="btn primary big" id="cbNext">Continuar</button>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
