@@ -8,7 +8,7 @@ This is a static site with no build step. All data lives in Supabase (Postgres) 
 index.html        UI (brand: Bleu M #004D9D, Taviraj Light + Work Sans)
 app.js            app logic
 config.js         ← your Supabase URL + anon key
-vendor/           supabase-js 2.45.4 bundled locally (no CDN needed)
+vendor/           supabase-js 2.117.2 bundled locally (no CDN needed)
 fonts/            Work Sans + Taviraj, self-hosted (SIL OFL)
 assets/logo.svg   ← drop the official Mustela logo here (optional)
 supabase/schema.sql  tables, RLS, RPCs, realtime

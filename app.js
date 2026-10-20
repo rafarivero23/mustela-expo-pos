@@ -1,6 +1,6 @@
 // Mustela Expo POS — v2 (Vercel + Supabase)
 // Vendored locally (no CDN dependency on venue Wi-Fi). Rebuild: see README.
-import { createClient } from './vendor/supabase-2.45.4.js';
+import { createClient } from './vendor/supabase-2.117.2.js';
 
 const CFG = window.MUSTELA_CONFIG || {};
 const $ = id => document.getElementById(id);
