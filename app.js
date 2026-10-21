@@ -50,8 +50,10 @@ function errMsg(e){
     metodo_invalido:'Elige la forma de pago.', pedido_no_cobrado:'Solo se pueden devolver pedidos cobrados.', producto_no_en_pedido:'Ese producto no está en el pedido.', devolucion_vacia:'Marca al menos una pieza para devolver.', sin_numeros:'No se pudo generar el número. Intenta de nuevo.',
   };
   for (const k in map) if (m.includes(k)) return map[k];
+  if (e?.code==='PGRST202' || /Could not find the function|does not exist|schema cache/i.test(m)) return 'Falta correr la actualización de la base de datos (SQL) en Supabase. Avisa al administrador.';
   if (/fetch|network|Failed/i.test(m)) return 'Sin conexión. Revisa el internet e intenta de nuevo.';
-  return 'No se pudo guardar. Intenta de nuevo.';
+  console.warn('Error no mapeado:', e);
+  return `No se pudo guardar. Intenta de nuevo. (${String(e?.code||'')} ${m.slice(0,80)})`.replace(' ( )','');
 }
 async function rpc(fn, args){ const { data, error } = await sb.rpc(fn, args); if (error) throw error; return data; }
 
