@@ -594,7 +594,6 @@ const lineColor = c => LINE_COLORS[String(c||'').trim().toLowerCase()] || '#F1D9
 
 /* ---------- render + boot ---------- */
 function renderAll(){
-  $('eventName').textContent=(S.isStaff?S.cfg.evento:S.evento)||'Expo';
   if(S.view==='tienda') renderKiosk(); else { $('cartbar').hidden=true; document.body.classList.remove('kiosk-cart'); }
   if(S.view==='caja') renderCaja();
   if(S.view==='surtido') renderSurtido();
