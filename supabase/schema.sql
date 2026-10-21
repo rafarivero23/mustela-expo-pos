@@ -50,7 +50,10 @@ create table if not exists public.orders (
   delivered_at  timestamptz,
   cancelled_at  timestamptz,
   consejera     text not null default '',
-  factura       boolean not null default false
+  factura       boolean not null default false,
+  sms_count     int not null default 0,
+  sms_status    text not null default '',
+  sms_at        timestamptz
 );
 create index if not exists orders_status_idx on public.orders (status);
 

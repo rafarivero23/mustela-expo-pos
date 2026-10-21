@@ -225,6 +225,7 @@ $('k-form').onsubmit=async e=>{
       p_member: { etapa:$('c-etapa').value, ciudad:$('c-ciudad').value.trim(), whatsapp:$('c-wa').checked, correo:$('c-mail').checked },
     });
     $('doneName').textContent=`¡Gracias, ${nombre}!`; $('doneCode').textContent=res.number; $('doneTotal').textContent=money(res.total);
+    $('doneSms').hidden=true; sendSms(res.number).then(r=>{ if(r.ok){ $('doneSms').textContent=`Te enviamos un SMS al ${tel.slice(-4).padStart(10,'•')} con tu número de pedido.`; $('doneSms').hidden=false; } });
     setStep('done');
     let s=30; $('doneTimer').textContent=`Esta pantalla se reinicia en ${s} s`;
     doneI=setInterval(()=>{ s--; $('doneTimer').textContent=`Esta pantalla se reinicia en ${s} s`; if(s<=0){ clearInterval(doneI); resetKiosk(); setStep('shop'); } },1000);
@@ -232,6 +233,17 @@ $('k-form').onsubmit=async e=>{
   finally{ S.busy=false; $('submitOrder').disabled=false; }
 };
 $('newOrder').onclick=()=>{ resetKiosk(); setStep('shop'); };
+
+/* SMS with the order number (Vercel function /api/sms → Twilio). Never blocks the order. */
+async function sendSms(number, asStaff=false){
+  try{
+    const headers={'Content-Type':'application/json'};
+    if(asStaff && S.session?.access_token) headers.Authorization='Bearer '+S.session.access_token;
+    const r=await fetch('/api/sms',{ method:'POST', headers, body:JSON.stringify({ number }) });
+    const j=await r.json().catch(()=>({}));
+    return { ok:r.ok, status:r.status, ...j };
+  }catch(e){ return { ok:false, error:'red' }; }
+}
 
 /* ---------- COMUNIDAD ---------- */
 let mDoneT;
@@ -260,7 +272,7 @@ $('mAgain').onclick=resetCommunity;
 
 /* ============================ STAFF DATA ============================ */
 const normOrder = o => ({ number:o.number, items:o.items||[], total:Number(o.total)||0, customer:o.customer||{}, community:o.community, status:o.status,
-  consejera:o.consejera||'', factura:!!o.factura, createdAt:o.created_at, paidAt:o.paid_at, payMethod:o.pay_method, payRef:o.pay_ref, readyAt:o.ready_at, deliveredAt:o.delivered_at, cancelledAt:o.cancelled_at });
+  consejera:o.consejera||'', factura:!!o.factura, smsCount:o.sms_count||0, smsStatus:o.sms_status||'', smsAt:o.sms_at, createdAt:o.created_at, paidAt:o.paid_at, payMethod:o.pay_method, payRef:o.pay_ref, readyAt:o.ready_at, deliveredAt:o.delivered_at, cancelledAt:o.cancelled_at });
 const normProduct = p => ({ ...p, price:Number(p.price)||0, order:p.sort_order });
 const normMember = m => ({ ...m, createdAt:m.created_at });
 
@@ -351,7 +363,7 @@ function renderCajaDetail(){
       <div><p class="eyebrow" style="margin:0">Pedido · ${hhmm(o.createdAt)}</p><div class="code" style="font-size:64px">${esc(o.number)}</div></div>
       <div style="display:grid;gap:6px;justify-items:end">${pill(o.status)}${o.factura?'<span class="pill p-pend">Requiere factura</span>':''}</div>
     </div>
-    <div><b>${esc(fullName(c))}</b><br><span class="muted">${esc(c.telefono||'')}${c.email?' · '+esc(c.email):''}</span>${o.community?'<br><span class="pill p-ready" style="margin-top:6px">Se unió a la Comunidad</span>':''}${o.consejera?`<br><span class="muted" style="font-size:14px">Atendió: <b>${esc(o.consejera)}</b></span>`:''}</div>
+    <div><b>${esc(fullName(c))}</b><br><span class="muted">${esc(c.telefono||'')}${c.email?' · '+esc(c.email):''}</span>${o.community?'<br><span class="pill p-ready" style="margin-top:6px">Se unió a la Comunidad</span>':''}${o.consejera?`<br><span class="muted" style="font-size:14px">Atendió: <b>${esc(o.consejera)}</b></span>`:''}<br><span class="muted" style="font-size:14px">SMS: ${o.smsStatus?esc(o.smsStatus)+(o.smsAt?' · '+hhmm(o.smsAt):''):'no enviado'} <button type="button" class="linkbtn" data-sms="${esc(o.number)}" style="display:inline">${o.smsCount?'Reenviar SMS':'Enviar SMS'}</button></span></div>
     <div class="lines">${(o.items||[]).map(lineHtml).join('')}
       ${addSel}
       <div class="total num"><span>Total</span><span>${money(o.total)}</span></div>
@@ -396,6 +408,10 @@ async function saveItems(o, next, okMsg, addedPid){
   }catch(ex){ toast(errMsg(ex)); } finally{ S.busy=false; }
 }
 $('cajaDetail').onclick=async e=>{
+  const sm=e.target.closest('[data-sms]');
+  if(sm){ sm.disabled=true; const r=await sendSms(sm.dataset.sms,true); sm.disabled=false;
+    toast(r.ok?'SMS enviado':r.error==='sms_no_configurado'?'El SMS no está configurado (faltan las claves de Twilio en Vercel).':r.error==='limite_sms'?'Ya se enviaron 5 SMS para este pedido.':`No se pudo enviar el SMS${r.detail?': '+r.detail:''}`);
+    queue('orders'); return; }
   const rb=e.target.closest('[data-rq]');
   if(rb){ const pid=rb.dataset.rq, cur=S.retQty[pid]||0, d=+rb.dataset.rd;
     const o=S.orders.find(x=>x.number===S.sel); const it=o?.items.find(i=>i.pid===pid); const max=it?it.qty-(retInfo(o.number).qty[pid]||0):0;
