@@ -410,6 +410,17 @@ a{color:var(--accent)}
     <div class="colh"><h2>Productos</h2><span class="muted" style="font-size:14px">Disponible = stock − vendido − apartado en pedidos sin cobrar</span></div>
     <div class="tscroll" id="invWrap"><table><thead><tr><th>Foto</th><th>Producto</th><th>Línea</th><th>Tamaño</th><th class="r">Precio</th><th class="r">Stock</th><th class="r">Vendido</th><th class="r">Apartado</th><th class="r">Disponible</th><th>Visible</th></tr></thead><tbody id="invBody"></tbody></table></div>
 
+    <div class="panel section" id="importBox">
+      <h3>Importar catálogo desde CSV</h3>
+      <p class="muted" style="margin:0;font-size:14px">Columnas: <b>nombre, linea, tamaño, precio, stock</b> (opcionales: visible, orden, imagen_url, id). Si el producto ya existe (mismo id, o mismo nombre y tamaño) se actualiza; si no, se agrega. Tip: descarga el catálogo actual, edítalo en Excel y vuelve a subirlo.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button type="button" class="btn ghost" id="expCatalog">Descargar catálogo / plantilla (CSV)</button>
+        <label class="btn primary">Elegir archivo CSV<input type="file" accept=".csv,text/csv,text/plain" id="impFile" class="vh"></label>
+      </div>
+      <label class="check"><input type="checkbox" id="impHide"><span>Ocultar en la tienda los productos que no vengan en el archivo (por ejemplo, los de muestra)</span></label>
+      <div id="impPreview" hidden style="display:grid;gap:12px"></div>
+    </div>
+
     <form id="addForm" class="panel section" novalidate>
       <h3>Agregar producto</h3>
       <div class="grid2">

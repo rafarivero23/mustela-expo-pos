@@ -488,6 +488,102 @@ $('expMembers').onclick=async()=>{ await load('members');
   for(const m of [...S.members].sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)))) rows.push([m.createdAt,m.nombre,m.apellido,m.telefono,m.email,m.etapa,m.ciudad,m.whatsapp?'Sí':'No',m.correo?'Sí':'No',m.origen,m.pedido]);
   save(`mustela-comunidad-${stamp()}.csv`,csv(rows)); };
 
+/* ---------- CSV import (Inventario) ---------- */
+function parseCSV(text){
+  text=text.replace(/^﻿/,'');
+  const first=text.split(/\r?\n/)[0]||'';
+  const delim=(first.split(';').length>first.split(',').length)?';':(first.includes('\t')&&!first.includes(',')?'\t':',');
+  const rows=[]; let row=[], f='', q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){ f+='"'; i++; } else q=false; } else f+=c; }
+    else if(c==='"') q=true;
+    else if(c===delim){ row.push(f); f=''; }
+    else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n') i++; row.push(f); rows.push(row); row=[]; f=''; }
+    else f+=c;
+  }
+  if(f!==''||row.length){ row.push(f); rows.push(row); }
+  return rows.filter(r=>r.some(v=>String(v).trim()!==''));
+}
+const norm=s=>String(s??'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+const COLS={ id:['id'], name:['nombre','producto','name','product'], category:['linea','categoria','category','line'],
+  size:['tamano','size','presentacion','contenido'], price:['precio','price','precio_mxn'], stock:['stock','cantidad','inventario','piezas','qty'],
+  active:['visible','activo','active'], order:['orden','order','posicion'], image_url:['imagen_url','imagen','image_url','foto','image'] };
+const num=v=>{ const s=String(v??'').replace(/[^0-9.,-]/g,''); if(!s) return NaN; const t=/,\d{1,2}$/.test(s)&&!s.includes('.')?s.replace(',','.'):s.replace(/,/g,''); return Number(t); };
+const yes=v=>!/^(no|n|0|false|falso|oculto)$/i.test(String(v??'').trim());
+let IMP=null;
+async function readCSVFile(file){
+  const buf=await file.arrayBuffer();
+  try{ return new TextDecoder('utf-8',{fatal:true}).decode(buf); }catch(e){ return new TextDecoder('windows-1252').decode(buf); }
+}
+$('impFile').onchange=async e=>{
+  const file=e.target.files?.[0]; e.target.value=''; if(!file) return;
+  const rows=parseCSV(await readCSVFile(file));
+  if(rows.length<2) return showImp({error:'El archivo no tiene filas de productos.'});
+  const head=rows[0].map(norm), idx={};
+  for(const [k,al] of Object.entries(COLS)){ const i=head.findIndex(h=>al.includes(h)); if(i>=0) idx[k]=i; }
+  const missing=['name','price','stock'].filter(k=>idx[k]===undefined);
+  if(missing.length) return showImp({error:`Faltan columnas: ${missing.map(k=>({name:'nombre',price:'precio',stock:'stock'})[k]).join(', ')}. Descarga la plantilla para ver el formato.`});
+  const byId=new Map(S.products.map(p=>[p.id,p])), byKey=new Map(S.products.map(p=>[norm(p.name)+'|'+norm(p.size),p]));
+  const seen=new Set(), items=[];
+  rows.slice(1).forEach((r,n)=>{
+    const g=k=>idx[k]===undefined?undefined:String(r[idx[k]]??'').trim();
+    const it={ line:n+2, name:g('name')||'', category:g('category'), size:g('size'), price:num(g('price')), stock:num(g('stock')),
+      active: idx.active===undefined?undefined:yes(g('active')), order: idx.order===undefined?undefined:num(g('order')), image_url:g('image_url'), id:g('id') };
+    const key=norm(it.name)+'|'+norm(it.size??'');
+    const match=(it.id&&byId.get(it.id))||byKey.get(key);
+    if(!it.name) it.err='Sin nombre';
+    else if(!(it.price>=0)) it.err='Precio inválido';
+    else if(!(it.stock>=0)) it.err='Stock inválido';
+    else if(seen.has(key)) it.err='Repetido en el archivo';
+    else if(it.image_url && !/^https?:\/\//i.test(it.image_url)) it.err='imagen_url debe empezar con https://';
+    seen.add(key); it.match=match; it.stock=Math.round(it.stock);
+    items.push(it);
+  });
+  const ok=items.filter(i=>!i.err);
+  const keep=new Set(ok.map(i=>i.match?.id).filter(Boolean));
+  const hide=S.products.filter(p=>!keep.has(p.id)&&p.active!==false);
+  IMP={ items, ok, hide, file:file.name };
+  showImp({});
+};
+function showImp({error}){
+  const box=$('impPreview'); box.hidden=false;
+  if(error){ box.innerHTML=`<p class="banner bad" style="margin:0">${esc(error)}</p>`; IMP=null; return; }
+  const {items,ok,hide,file}=IMP, nNew=ok.filter(i=>!i.match).length, nUpd=ok.length-nNew, nErr=items.length-ok.length, hideOn=$('impHide').checked;
+  box.innerHTML=`<p style="margin:0"><b>${esc(file)}</b>: <span class="pill p-ready">${nNew} nuevos</span> <span class="pill p-paid">${nUpd} se actualizan</span> ${nErr?`<span class="pill p-cancel">${nErr} con error (se omiten)</span>`:''} ${hideOn&&hide.length?`<span class="pill p-pend">${hide.length} se ocultan</span>`:''}</p>
+    <div class="tscroll"><table style="min-width:640px"><thead><tr><th>Fila</th><th>Producto</th><th>Línea</th><th>Tamaño</th><th class="r">Precio</th><th class="r">Stock</th><th>Resultado</th></tr></thead><tbody>
+    ${items.slice(0,200).map(i=>`<tr><td class="num">${i.line}</td><td>${esc(i.name)}</td><td>${esc(i.category??'')}</td><td>${esc(i.size??'')}</td><td class="r num">${isNaN(i.price)?'—':money(i.price)}</td><td class="r num">${isNaN(i.stock)?'—':i.stock}</td>
+      <td>${i.err?`<span class="pill p-cancel">${esc(i.err)}</span>`:i.match?'<span class="pill p-paid">Actualiza</span>':'<span class="pill p-ready">Nuevo</span>'}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap"><button type="button" class="btn ghost" id="impCancel">Cancelar</button><button type="button" class="btn primary" id="impGo" ${ok.length?'':'disabled'}>Importar ${ok.length} productos</button></div>`;
+}
+$('impHide').onchange=()=>{ if(IMP) showImp({}); };
+$('importBox').addEventListener('click',async e=>{
+  if(e.target.id==='impCancel'){ IMP=null; $('impPreview').hidden=true; return; }
+  if(e.target.id!=='impGo'||!IMP||S.busy) return;
+  S.busy=true; e.target.disabled=true; e.target.textContent='Importando…';
+  try{
+    let nextOrder=Math.max(0,...S.products.map(p=>p.order||0));
+    const row=i=>{ const r={ name:i.name, price:i.price, stock:i.stock, sample:false };
+      if(i.category!==undefined) r.category=i.category; if(i.size!==undefined) r.size=i.size;
+      if(i.active!==undefined) r.active=i.active; if(i.order!==undefined&&!isNaN(i.order)) r.sort_order=Math.round(i.order);
+      if(i.image_url) r.image_url=i.image_url; return r; };
+    const ins=IMP.ok.filter(i=>!i.match).map(i=>{ const r=row(i); if(r.sort_order===undefined) r.sort_order=++nextOrder; if(r.active===undefined) r.active=true; return r; });
+    const upd=IMP.ok.filter(i=>i.match).map(i=>({ ...row(i), id:i.match.id }));
+    if(ins.length){ const {error}=await sb.from('products').insert(ins); if(error) throw error; }
+    for(const u of upd){ const {id,...patch}=u; const {error}=await sb.from('products').update(patch).eq('id',id); if(error) throw error; }
+    if($('impHide').checked && IMP.hide.length){ const {error}=await sb.from('products').update({active:false}).in('id',IMP.hide.map(p=>p.id)); if(error) throw error; }
+    toast(`Catálogo importado: ${ins.length} nuevos, ${upd.length} actualizados`);
+    IMP=null; $('impPreview').hidden=true; queue('products','avail');
+  }catch(ex){ toast('No se pudo importar: '+errMsg(ex)); e.target.disabled=false; e.target.textContent='Reintentar'; }
+  finally{ S.busy=false; }
+});
+$('expCatalog').onclick=async()=>{ await load('products');
+  const rows=[['id','nombre','linea','tamaño','precio','stock','visible','orden','imagen_url']];
+  for(const p of [...S.products].sort((a,b)=>(a.order??999)-(b.order??999))) rows.push([p.id,p.name,p.category,p.size,p.price,p.stock,p.active!==false?'sí':'no',p.order??'',p.image_url||'']);
+  if(rows.length===1) rows.push(['','Ejemplo de producto','Bebé','300 ml','389','40','sí','1','']);
+  save(`mustela-catalogo-${stamp()}.csv`,csv(rows)); };
+
 /* ---------- brand ---------- */
 // Website palette per product line (Play Book › Website colors)
 const LINE_COLORS = { 'bebé':'#E1F3FA', 'bebe':'#E1F3FA', 'piel atópica':'#D2F0EF', 'piel atopica':'#D2F0EF', 'maternidad':'#EFCCD7',
