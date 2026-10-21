@@ -16,7 +16,8 @@ create table if not exists public.settings (
   evento        text not null default 'Expo',
   kiosk_pin     text not null default '2026' check (kiosk_pin ~ '^[0-9]{4,8}$'),
   privacy_url   text not null default '',
-  hold_minutes  int  not null default 30 check (hold_minutes between 5 and 1440)
+  hold_minutes  int  not null default 30 check (hold_minutes between 5 and 1440),
+  consejeras    text[] not null default '{}'
 );
 
 create table if not exists public.products (
@@ -47,7 +48,8 @@ create table if not exists public.orders (
   pay_ref       text,
   ready_at      timestamptz,
   delivered_at  timestamptz,
-  cancelled_at  timestamptz
+  cancelled_at  timestamptz,
+  consejera     text not null default ''
 );
 create index if not exists orders_status_idx on public.orders (status);
 
@@ -119,6 +121,7 @@ language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
     'evento',      (select evento from public.settings where id = 1),
     'privacy_url', (select privacy_url from public.settings where id = 1),
+    'consejeras',  (select to_jsonb(consejeras) from public.settings where id = 1),
     'products', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', p.id, 'name', p.name, 'category', p.category, 'size', p.size,
@@ -148,6 +151,7 @@ declare
   v_apellido text := left(trim(coalesce(p_customer ->> 'apellido', '')), 80);
   v_tel      text := regexp_replace(coalesce(p_customer ->> 'telefono', ''), '\D', '', 'g');
   v_email    text := left(lower(trim(coalesce(p_customer ->> 'email', ''))), 120);
+  v_conse    text := trim(coalesce(p_customer ->> 'consejera', ''));
   v_chars    text := 'ACDEFHJKLMNPRTUVWXY3479';
   v_items    jsonb := '[]'::jsonb;
   v_total    numeric := 0;
@@ -160,6 +164,7 @@ begin
   if v_email <> '' and not public._valid_email(v_email) then raise exception 'correo_invalido'; end if;
   if coalesce(p_community, false) and v_email = '' then raise exception 'correo_requerido'; end if;
   if coalesce((p_customer ->> 'privacidad')::boolean, false) is not true then raise exception 'privacidad_requerida'; end if;
+  if v_conse <> '' and not exists (select 1 from public.settings where id = 1 and v_conse = any(consejeras)) then v_conse := ''; end if;
   if jsonb_typeof(p_items) is distinct from 'array' or jsonb_array_length(p_items) = 0 then raise exception 'pedido_vacio'; end if;
   if jsonb_array_length(p_items) > 40 then raise exception 'cantidad_invalida'; end if;
 
@@ -191,10 +196,10 @@ begin
     v_number := 'M' || (select string_agg(substr(v_chars, 1 + floor(random() * length(v_chars))::int, 1), '')
                         from generate_series(1, 3));
     begin
-      insert into public.orders (number, items, total, customer, community)
+      insert into public.orders (number, items, total, customer, community, consejera)
       values (v_number, v_items, v_total,
               jsonb_build_object('nombre', v_nombre, 'apellido', v_apellido, 'telefono', v_tel, 'email', v_email),
-              coalesce(p_community, false));
+              coalesce(p_community, false), v_conse);
       exit;
     exception when unique_violation then
       v_try := v_try + 1;

@@ -121,7 +121,8 @@ async function loadKiosk(){
   try{
     const k = await rpc('get_kiosk');
     S.catalog = (k.products||[]).map(p=>({...p, price:Number(p.price)||0, available:Number(p.available)||0}));
-    S.evento = k.evento || 'Expo'; S.privacyUrl = k.privacy_url || '';
+    S.evento = k.evento || 'Expo'; S.privacyUrl = k.privacy_url || ''; S.consejeras = Array.isArray(k.consejeras) ? k.consejeras : [];
+    renderConsejeras();
     S.kioskLoaded = true; $('dbBanner').hidden=true;
   }catch(e){ $('dbBanner').hidden=false; }
   renderPrivacy();
@@ -134,6 +135,11 @@ function renderPrivacy(){
   });
 }
 
+function renderConsejeras(){
+  const list=S.consejeras||[], sel=$('c-consejera'), cur=sel.value;
+  $('c-conseWrap').hidden=!list.length;
+  sel.innerHTML='<option value="">Selecciona…</option>'+list.map(n=>`<option${n===cur?' selected':''}>${esc(n)}</option>`).join('')+'<option value="">Nadie / no recuerdo</option>';
+}
 let idleT, doneI;
 function bumpIdle(){ clearTimeout(idleT); if(S.view!=='tienda'||S.step==='done') return; if(!cartItems().length && S.step==='shop') return; idleT=setTimeout(()=>{ resetKiosk(); renderAll(); toast('Pedido reiniciado por inactividad'); },120000); }
 ['pointerdown','keydown'].forEach(ev=>document.addEventListener(ev,bumpIdle,true));
@@ -211,7 +217,7 @@ $('k-form').onsubmit=async e=>{
   try{
     const res = await rpc('create_order',{
       p_items: items.map(i=>({pid:i.pid, qty:i.qty})),
-      p_customer: { nombre, apellido, telefono:tel, email, privacidad:true },
+      p_customer: { nombre, apellido, telefono:tel, email, privacidad:true, consejera:$('c-consejera').value },
       p_community: join,
       p_member: { etapa:$('c-etapa').value, ciudad:$('c-ciudad').value.trim(), whatsapp:$('c-wa').checked, correo:$('c-mail').checked },
     });
@@ -251,7 +257,7 @@ $('mAgain').onclick=resetCommunity;
 
 /* ============================ STAFF DATA ============================ */
 const normOrder = o => ({ number:o.number, items:o.items||[], total:Number(o.total)||0, customer:o.customer||{}, community:o.community, status:o.status,
-  createdAt:o.created_at, paidAt:o.paid_at, payMethod:o.pay_method, payRef:o.pay_ref, readyAt:o.ready_at, deliveredAt:o.delivered_at, cancelledAt:o.cancelled_at });
+  consejera:o.consejera||'', createdAt:o.created_at, paidAt:o.paid_at, payMethod:o.pay_method, payRef:o.pay_ref, readyAt:o.ready_at, deliveredAt:o.delivered_at, cancelledAt:o.cancelled_at });
 const normProduct = p => ({ ...p, price:Number(p.price)||0, order:p.sort_order });
 const normMember = m => ({ ...m, createdAt:m.created_at });
 
@@ -310,7 +316,7 @@ function renderCajaDetail(){
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
       <div><p class="eyebrow" style="margin:0">Pedido · ${hhmm(o.createdAt)}</p><div class="code" style="font-size:64px">${esc(o.number)}</div></div>${pill(o.status)}
     </div>
-    <div><b>${esc(fullName(c))}</b><br><span class="muted">${esc(c.telefono||'')}${c.email?' · '+esc(c.email):''}</span>${o.community?'<br><span class="pill p-ready" style="margin-top:6px">Se unió a la Comunidad</span>':''}</div>
+    <div><b>${esc(fullName(c))}</b><br><span class="muted">${esc(c.telefono||'')}${c.email?' · '+esc(c.email):''}</span>${o.community?'<br><span class="pill p-ready" style="margin-top:6px">Se unió a la Comunidad</span>':''}${o.consejera?`<br><span class="muted" style="font-size:14px">Atendió: <b>${esc(o.consejera)}</b></span>`:''}</div>
     <div class="lines">${(o.items||[]).map((i,ix)=>{ const short=editable && i.qty>(S.avail[i.pid]?.free??0);
       return `<div class="line"><div class="nm">${editable?`<span class="mini-step"><button data-q="${ix}" data-d="-1" aria-label="Quitar">−</button><b class="num" style="min-width:24px;text-align:center">${i.qty}</b><button data-q="${ix}" data-d="1" aria-label="Agregar">+</button></span>`:`<b>${i.qty} ×</b>`} ${esc(i.name)} <span class="muted">${esc(i.size||'')}</span>${short?' <span class="pill p-cancel">Sin stock</span>':''}</div><span class="num">${money(i.price*i.qty)}</span></div>`;}).join('')}
       <div class="total num"><span>Total</span><span>${money(o.total)}</span></div></div>
@@ -401,9 +407,12 @@ function renderInv(){
       <td><input type="checkbox" data-f="active" data-id="${p.id}" ${p.active!==false?'checked':''} aria-label="Visible en tienda"></td></tr>`;}).join('')
       :`<tr><td colspan="10" class="empty">${S.staffLoaded?'Sin productos. Agrega el primero abajo.':'Cargando…'}</td></tr>`;
   }
+  const byC={}; for(const o of paid){ const k=o.consejera||'Sin consejera'; const r=byC[k]||(byC[k]={n:0,u:0,t:0}); r.n++; r.t+=o.total||0; r.u+=(o.items||[]).reduce((a,i)=>a+i.qty,0); }
+  const cr=Object.entries(byC).sort((a,b)=>b[1].t-a[1].t);
+  $('conseBody').innerHTML=cr.length?cr.map(([k,r])=>`<tr><td>${esc(k)}</td><td class="r num">${r.n}</td><td class="r num">${r.u}</td><td class="r num">${money(r.t)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Aún no hay ventas cobradas.</td></tr>';
   const ms=S.members.slice(0,25);
   $('memBody').innerHTML=ms.length?ms.map(m=>`<tr><td class="num">${hhmm(m.createdAt)}</td><td>${esc([m.nombre,m.apellido].filter(Boolean).join(' '))}</td><td class="num">${esc(m.telefono)}</td><td>${esc(m.email)}</td><td>${esc(m.etapa)}</td><td>${esc(m.ciudad)}</td><td>${esc(m.origen)}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Aún no hay registros.</td></tr>';
-  if(document.activeElement?.closest?.('#cfgForm')==null){ $('cfg-event').value=S.cfg.evento||''; $('cfg-pin').value=S.cfg.kiosk_pin||''; $('cfg-priv').value=S.cfg.privacy_url||''; $('cfg-hold').value=S.cfg.hold_minutes??30; }
+  if(document.activeElement?.closest?.('#cfgForm')==null){ $('cfg-event').value=S.cfg.evento||''; $('cfg-pin').value=S.cfg.kiosk_pin||''; $('cfg-priv').value=S.cfg.privacy_url||''; $('cfg-hold').value=S.cfg.hold_minutes??30; $('cfg-consejeras').value=(S.cfg.consejeras||[]).join('\n'); }
 }
 $('invWrap').addEventListener('focusout',()=>setTimeout(()=>{ if(S.invPending && !$('invWrap').contains(document.activeElement)) renderInv(); },0));
 /* product photos → Supabase Storage (bucket product-images, staff-only writes) */
@@ -467,7 +476,8 @@ $('cfgForm').onsubmit=async e=>{
   const pin=digits($('cfg-pin').value); if(pin.length<4||pin.length>8) return toast('El PIN debe tener de 4 a 8 dígitos');
   const hold=Math.round(Number($('cfg-hold').value)); if(!(hold>=5&&hold<=1440)) return toast('Minutos de apartado: entre 5 y 1440');
   const url=$('cfg-priv').value.trim(); if(url && !/^https?:\/\//i.test(url)) return toast('La liga debe empezar con https://');
-  const { error } = await sb.from('settings').update({ evento:$('cfg-event').value.trim()||'Expo', kiosk_pin:pin, privacy_url:url, hold_minutes:hold }).eq('id',1);
+  const consejeras=[...new Set($('cfg-consejeras').value.split(/\r?\n/).map(x=>x.trim().slice(0,60)).filter(Boolean))].slice(0,60);
+  const { error } = await sb.from('settings').update({ evento:$('cfg-event').value.trim()||'Expo', kiosk_pin:pin, privacy_url:url, hold_minutes:hold, consejeras }).eq('id',1);
   if(error) toast(errMsg(error)); else { toast('Ajustes guardados'); queue('settings','avail'); }
 };
 
@@ -480,8 +490,8 @@ function save(filename,text){
 }
 const stamp=()=>new Date().toISOString().slice(0,10);
 $('expOrders').onclick=async()=>{ await load('orders');
-  const rows=[['Pedido','Estado','Creado','Cobrado','Forma de pago','Referencia','Nombre','Apellido','Celular','Correo','Comunidad','Producto','Tamaño','Cantidad','Precio','Subtotal','Total pedido']];
-  for(const o of [...S.orders].sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)))) for(const i of o.items||[]) rows.push([o.number,STATUS[o.status]?.[0]||o.status,o.createdAt,o.paidAt||'',o.payMethod||'',o.payRef||'',o.customer?.nombre,o.customer?.apellido,o.customer?.telefono,o.customer?.email,o.community?'Sí':'No',i.name,i.size,i.qty,i.price,i.qty*i.price,o.total]);
+  const rows=[['Pedido','Estado','Creado','Cobrado','Forma de pago','Referencia','Nombre','Apellido','Celular','Correo','Comunidad','Dermo-Consejera','Producto','Tamaño','Cantidad','Precio','Subtotal','Total pedido']];
+  for(const o of [...S.orders].sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)))) for(const i of o.items||[]) rows.push([o.number,STATUS[o.status]?.[0]||o.status,o.createdAt,o.paidAt||'',o.payMethod||'',o.payRef||'',o.customer?.nombre,o.customer?.apellido,o.customer?.telefono,o.customer?.email,o.community?'Sí':'No',o.consejera||'',i.name,i.size,i.qty,i.price,i.qty*i.price,o.total]);
   save(`mustela-pedidos-${stamp()}.csv`,csv(rows)); };
 $('expMembers').onclick=async()=>{ await load('members');
   const rows=[['Fecha','Nombre','Apellido','Celular','Correo','Etapa','Ciudad','WhatsApp','Correos','Origen','Pedido']];
