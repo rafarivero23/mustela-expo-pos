@@ -19,7 +19,7 @@ vercel.json       headers
 ## Setup (about 15 min)
 
 1. **Supabase**: create a project (free tier is fine). Pick the **South America (São Paulo)** or **US East** region, which are the closest to Mexico.
-2. **SQL Editor**: run `supabase/schema.sql`, then edit the staff email in `supabase/seed.sql` and run it.
+2. **SQL Editor**: run `supabase/schema.sql`, then `supabase/002_product_images.sql` (photo storage), then edit the staff email in `supabase/seed.sql` and run it.
 3. **Authentication → Providers → Email**: turn **off** "Allow new users to sign up". Then under **Authentication → Users → Add user**, create each staff member with email and password, ticking "Auto confirm". Every staff email must also be in the `staff` table:
    ```sql
    insert into staff (email, nombre) values ('persona@optimistinc.mx', 'Nombre');
@@ -48,6 +48,7 @@ vercel.json       headers
 - **Customers (anon) cannot read anything** except the catalog and availability through `get_kiosk()`. They can only write through `create_order()` and `join_community()`. Both validate the input on the server, and `create_order()` locks the product rows, re-checks stock and takes prices from the database. In testing, 20 simultaneous orders for 5 remaining units produced exactly 5 successful orders.
 - **Staff**: a signed-in Supabase user whose email is in `staff`. Order changes go through `mark_paid`, `update_order_items` and `set_order_status`, which enforce the order lifecycle (pendiente → pagado → listo → entregado, or pendiente → cancelado) and use server timestamps.
 - **Realtime**: staff screens update live, and also refresh every 30 s in case the realtime connection drops. Tablets refresh availability every 15 s and again before each order.
+- **Product photos**: Inventario → Foto → Subir. Photos are shrunk on the device (max 900 px, WebP) and stored in the public Supabase Storage bucket `product-images`; only staff can upload or delete.
 - **CSV exports** (Pedidos and Comunidad) are UTF-8 with a BOM, so Excel shows accents correctly.
 
 ## Updating supabase-js

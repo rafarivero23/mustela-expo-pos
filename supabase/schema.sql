@@ -29,6 +29,7 @@ create table if not exists public.products (
   active      boolean not null default true,
   sort_order  int  not null default 999,
   sample      boolean not null default false,
+  image_url   text not null default '',
   created_at  timestamptz not null default now()
 );
 
@@ -121,7 +122,7 @@ language sql stable security definer set search_path = public as $$
     'products', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', p.id, 'name', p.name, 'category', p.category, 'size', p.size,
-               'price', p.price, 'available', greatest(a.available, 0))
+               'price', p.price, 'image_url', p.image_url, 'available', greatest(a.available, 0))
              order by p.sort_order, p.name)
       from public.products p join public._availability() a on a.id = p.id
       where p.active), '[]'::jsonb)
@@ -359,6 +360,14 @@ create policy orders_staff_read on public.orders for select to authenticated usi
 drop policy if exists members_staff_read on public.members;
 create policy members_staff_read on public.members for select to authenticated using (public.is_staff());
 
+-- ---------- Table privileges -----------------------------------------
+-- Newer Supabase projects don't grant table access by default. RLS above
+-- still decides which rows staff see; anon gets no table access at all.
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.products to authenticated;
+grant select, update on public.settings to authenticated;
+grant select on public.orders, public.members, public.staff to authenticated;
+
 -- ---------- Function privileges --------------------------------------
 
 revoke execute on function public._availability()  from public, anon, authenticated;
@@ -396,3 +405,5 @@ begin
     end if;
   end loop;
 end $$;
+
+-- Product images (storage bucket + staff-only upload): see 002_product_images.sql

@@ -158,16 +158,17 @@ function renderKiosk(){
   const list=prods.filter(p=>S.cat==='Todos'||p.category===S.cat);
   if(!S.kioskLoaded) $('pgrid').innerHTML='<div class="empty">Cargando productos…</div>';
   else if(!list.length) $('pgrid').innerHTML='<div class="empty">Aún no hay productos. El personal puede agregarlos en Inventario.</div>';
-  else $('pgrid').innerHTML=list.map(p=>{
+  else { const hasImgs=S.catalog.some(p=>p.image_url); $('pgrid').innerHTML=list.map(p=>{
     const q=S.cart[p.id]||0, avail=p.available, out=avail<=0&&q===0, max=q>=avail;
     return `<div class="pcard${q?' in':''}${out?' out':''}">
+      ${hasImgs?`<div class="pimg" style="background:${lineColor(p.category)}">${p.image_url?`<img src="${esc(p.image_url)}" alt="" loading="lazy" onerror="this.remove()">`:''}</div>`:''}
       <div class="pc-top">${p.category?`<span class="pc-line" style="background:${lineColor(p.category)}">${esc(p.category)}</span>`:'<span></span>'}<span>${esc(p.size||'')}</span></div>
       <h3>${esc(p.name)}</h3>
       <div class="pc-bot"><span class="price num">${money(p.price)}</span>
       ${out?'<span class="pill p-cancel">Agotado</span>':
         q? `<div class="stepper"><button data-dec="${p.id}" aria-label="Quitar uno">−</button><span class="num">${q}</span><button class="add" data-inc="${p.id}" ${max?'disabled style="opacity:.4"':''} aria-label="Agregar uno">+</button></div>`
          : `<div class="stepper"><button class="add" data-inc="${p.id}" aria-label="Agregar ${esc(p.name)}">+</button></div>`}
-      </div></div>`;}).join('');
+      </div></div>`;}).join(''); }
   // drop cart lines for products that disappeared from the catalog
   for(const pid of Object.keys(S.cart)) if(S.kioskLoaded && !catById(pid)) delete S.cart[pid];
   const items=cartItems(), n=items.reduce((s,i)=>s+i.qty,0);
@@ -388,6 +389,8 @@ function renderInv(){
     S.invPending=false;
     const rows=[...S.products].sort((a,b)=>(a.order??999)-(b.order??999)||String(a.name).localeCompare(b.name));
     $('invBody').innerHTML=rows.length?rows.map(p=>{const i=S.avail[p.id]||{sold:0,held:0,available:0}; return `<tr>
+      <td><div class="thumbcell"><div class="thumb">${p.image_url?`<img src="${esc(p.image_url)}" alt="">`:'<span class="muted" style="font-size:12px">—</span>'}</div>
+        <div class="thumbbtns"><label class="linkbtn">${p.image_url?'Cambiar':'Subir'}<input class="vh" type="file" accept="image/*" data-img="${p.id}"></label>${p.image_url?`<button type="button" class="linkbtn rm" data-rmimg="${p.id}">Quitar</button>`:''}</div></div></td>
       <td><input data-f="name" data-id="${p.id}" value="${esc(p.name)}" aria-label="Nombre">${p.sample?' <span class="pill p-pend" style="margin-top:4px">Ejemplo</span>':''}</td>
       <td><input data-f="category" data-id="${p.id}" value="${esc(p.category||'')}" aria-label="Línea" style="min-width:120px"></td>
       <td><input data-f="size" data-id="${p.id}" value="${esc(p.size||'')}" aria-label="Tamaño" style="width:90px"></td>
@@ -396,15 +399,56 @@ function renderInv(){
       <td class="r num">${i.sold}</td><td class="r num">${i.held}</td>
       <td class="r num ${i.available<=3?'lowstock':''}">${i.available}</td>
       <td><input type="checkbox" data-f="active" data-id="${p.id}" ${p.active!==false?'checked':''} aria-label="Visible en tienda"></td></tr>`;}).join('')
-      :`<tr><td colspan="9" class="empty">${S.staffLoaded?'Sin productos. Agrega el primero abajo.':'Cargando…'}</td></tr>`;
+      :`<tr><td colspan="10" class="empty">${S.staffLoaded?'Sin productos. Agrega el primero abajo.':'Cargando…'}</td></tr>`;
   }
   const ms=S.members.slice(0,25);
   $('memBody').innerHTML=ms.length?ms.map(m=>`<tr><td class="num">${hhmm(m.createdAt)}</td><td>${esc([m.nombre,m.apellido].filter(Boolean).join(' '))}</td><td class="num">${esc(m.telefono)}</td><td>${esc(m.email)}</td><td>${esc(m.etapa)}</td><td>${esc(m.ciudad)}</td><td>${esc(m.origen)}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Aún no hay registros.</td></tr>';
   if(document.activeElement?.closest?.('#cfgForm')==null){ $('cfg-event').value=S.cfg.evento||''; $('cfg-pin').value=S.cfg.kiosk_pin||''; $('cfg-priv').value=S.cfg.privacy_url||''; $('cfg-hold').value=S.cfg.hold_minutes??30; }
 }
 $('invWrap').addEventListener('focusout',()=>setTimeout(()=>{ if(S.invPending && !$('invWrap').contains(document.activeElement)) renderInv(); },0));
+/* product photos → Supabase Storage (bucket product-images, staff-only writes) */
+const BUCKET='product-images';
+async function shrink(file, max=900){
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, max/Math.max(bmp.width,bmp.height));
+  const c = document.createElement('canvas'); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k);
+  const draw = bg => { const x=c.getContext('2d'); x.clearRect(0,0,c.width,c.height); if(bg){ x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height); } x.drawImage(bmp,0,0,c.width,c.height); };
+  const toBlob = (t,q) => new Promise(r=>c.toBlob(r,t,q));
+  draw(false); let b = await toBlob('image/webp',0.85);
+  if(!b || b.type!=='image/webp'){ draw(true); b = await toBlob('image/jpeg',0.85); }
+  return b;
+}
+const storagePath = url => { const m=String(url||'').split('/'+BUCKET+'/'); return m.length>1 ? decodeURIComponent(m[1].split('?')[0]) : null; };
+async function uploadImage(id, file){
+  if(!file) return;
+  if(!/^image\//.test(file.type)) return toast('Elige un archivo de imagen');
+  toast('Subiendo foto…');
+  try{
+    const blob = await shrink(file);
+    if(blob.size > 2*1024*1024) return toast('La foto es muy pesada (máx. 2 MB)');
+    const ext = blob.type==='image/webp'?'webp':'jpg';
+    const path = `${id}/${Date.now()}.${ext}`;
+    const up = await sb.storage.from(BUCKET).upload(path, blob, { contentType:blob.type, cacheControl:'31536000', upsert:false });
+    if(up.error) throw up.error;
+    const url = sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+    const old = storagePath(S.products.find(p=>p.id===id)?.image_url);
+    const { error } = await sb.from('products').update({ image_url:url }).eq('id',id);
+    if(error) throw error;
+    if(old) sb.storage.from(BUCKET).remove([old]);
+    toast('Foto guardada'); queue('products');
+  }catch(ex){ toast('No se pudo subir la foto. Revisa la conexión.'); }
+}
+$('invWrap').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-rmimg]'); if(!b) return; b.blur();
+  const id=b.dataset.rmimg, old=storagePath(S.products.find(p=>p.id===id)?.image_url);
+  const { error } = await sb.from('products').update({ image_url:'' }).eq('id',id);
+  if(error) return toast(errMsg(error));
+  if(old) sb.storage.from(BUCKET).remove([old]);
+  toast('Foto quitada'); queue('products');
+});
 $('invWrap').addEventListener('change',async e=>{
-  const el=e.target; const id=el.dataset.id, f=el.dataset.f; if(!id||!f) return;
+  const el=e.target;
+  if(el.dataset.img){ const f=el.files?.[0]; el.value=''; el.blur(); return uploadImage(el.dataset.img, f); } const id=el.dataset.id, f=el.dataset.f; if(!id||!f) return;
   let v = f==='active'?el.checked : el.value.trim();
   if(f==='price'||f==='stock'){ v=Number(String(v).replace(/[^0-9.]/g,'')); if(isNaN(v)||v<0){ toast('Escribe un número válido'); return; } if(f==='stock') v=Math.round(v); }
   if(f==='name'&&!v){ toast('El nombre no puede quedar vacío'); return; }
