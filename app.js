@@ -385,8 +385,15 @@ $('retGo').onclick=async()=>{
 $('cajaSearch').oninput=()=>{ renderCaja(); const v=$('cajaSearch').value.trim().toUpperCase(); const hit=S.orders.find(o=>o.number===v&&o.status!=='cancelado'); if(hit&&S.sel!==hit.number){ selectOrder(hit.number);} };
 function selectOrder(n){ if(S.sel!==n){ S.sel=n; S.method=null; S.cancelArm=false; S.retMode=false; S.retQty={}; $('payRef').value=''; $('cashIn').value=''; $('payErr').hidden=true; syncMethods(); renderCancel(); } renderCaja(); }
 ['pendList','paidList'].forEach(id=>$(id).onclick=e=>{ const b=e.target.closest('[data-sel]'); if(b) selectOrder(b.dataset.sel); });
-async function saveItems(o, next){
-  S.busy=true; try{ await rpc('update_order_items',{ p_number:o.number, p_items:next }); queue('orders','avail'); }catch(ex){ toast(errMsg(ex)); } finally{ S.busy=false; }
+async function saveItems(o, next, okMsg, addedPid){
+  S.busy=true;
+  try{
+    await rpc('update_order_items',{ p_number:o.number, p_items:next });
+    await load('orders'); await load('avail'); renderAll();
+    const now=S.orders.find(x=>x.number===o.number);
+    if(addedPid && !now?.items.some(i=>i.pid===addedPid)) toast('No se agregó: falta correr la actualización de la base de datos (SQL) en Supabase.');
+    else if(okMsg) toast(okMsg);
+  }catch(ex){ toast(errMsg(ex)); } finally{ S.busy=false; }
 }
 $('cajaDetail').onclick=async e=>{
   const rb=e.target.closest('[data-rq]');
@@ -406,7 +413,7 @@ $('cajaDetail').addEventListener('change',e=>{
   const o=S.orders.find(x=>x.number===S.sel); if(!o||o.status!=='pendiente') return;
   const items=(o.items||[]).map(i=>({pid:i.pid, qty:i.qty})); const ex=items.find(i=>i.pid===pid);
   if(ex) ex.qty+=1; else items.push({pid, qty:1});
-  saveItems(o,items); toast('Producto agregado');
+  saveItems(o,items,'Producto agregado',ex?null:pid);
 });
 $('cajaDetail').addEventListener('focusout',e=>{ if(e.target.id==='addPid'&&S.cajaPending){ S.cajaPending=false; setTimeout(renderCajaDetail,0); } });
 function syncMethods(){ document.querySelectorAll('#methods button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.m===S.method))); $('cashWrap').hidden=S.method!=='Efectivo'; $('refWrap').hidden=S.method==='Efectivo'; $('payBtn').disabled=!S.method; updateChange(); }
@@ -566,8 +573,16 @@ function save(filename,text){
 const stamp=()=>new Date().toISOString().slice(0,10);
 $('expOrders').onclick=async()=>{ await Promise.all([load('orders'),load('returns')]);
   const rows=[['Pedido','Estado','Creado','Cobrado','Forma de pago','Referencia','Nombre','Apellido','Celular','Correo','Comunidad','Dermo-Consejera','Factura','Producto','Tamaño','Cantidad','Devuelto','Precio','Subtotal','Total pedido','Reembolso pedido','Neto pedido']];
-  for(const o of [...S.orders].sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)))) for(const i of o.items||[]) rows.push([o.number,STATUS[o.status]?.[0]||o.status,o.createdAt,o.paidAt||'',o.payMethod||'',o.payRef||'',o.customer?.nombre,o.customer?.apellido,o.customer?.telefono,o.customer?.email,o.community?'Sí':'No',o.consejera||'',o.factura?'Sí':'No',i.name,i.size,i.qty,retInfo(o.number).qty[i.pid]||0,i.price,i.qty*i.price,o.total,retInfo(o.number).amount,netTotal(o)]);
+  for(const o of [...S.orders].sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)))) for(const i of o.items||[]) rows.push([o.number,(STATUS[o.status]?.[0]||o.status)+(retInfo(o.number).amount?(netUnits(o)<=0?' · Devuelto total':' · Con devolución'):''),o.createdAt,o.paidAt||'',o.payMethod||'',o.payRef||'',o.customer?.nombre,o.customer?.apellido,o.customer?.telefono,o.customer?.email,o.community?'Sí':'No',o.consejera||'',o.factura?'Sí':'No',i.name,i.size,i.qty,retInfo(o.number).qty[i.pid]||0,i.price,i.qty*i.price,o.total,retInfo(o.number).amount,netTotal(o)]);
   save(`mustela-pedidos-${stamp()}.csv`,csv(rows)); };
+$('expReturns').onclick=async()=>{ await Promise.all([load('orders'),load('returns')]);
+  const rows=[['Fecha devolución','Pedido','Fecha pedido','Nombre','Apellido','Celular','Correo','Dermo-Consejera','Producto','Tamaño','Piezas devueltas','Precio','Reembolso línea','Reembolso total devolución','Método de reembolso','Motivo','Registró']];
+  for(const r of [...S.returns].sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)))){
+    const o=S.orders.find(x=>x.number===r.order_number)||{customer:{}};
+    for(const i of r.items||[]) rows.push([r.created_at,r.order_number,o.createdAt||'',o.customer?.nombre,o.customer?.apellido,o.customer?.telefono,o.customer?.email,o.consejera||'',i.name,i.size,i.qty,i.price,i.qty*i.price,r.amount,r.method,r.reason||'',r.created_by||'']);
+  }
+  if(rows.length===1){ $('expNote').textContent='Aún no hay devoluciones.'; return; }
+  save(`mustela-devoluciones-${stamp()}.csv`,csv(rows)); };
 $('expMembers').onclick=async()=>{ await load('members');
   const rows=[['Fecha','Nombre','Apellido','Celular','Correo','Etapa','Ciudad','WhatsApp','Correos','Origen','Pedido']];
   for(const m of [...S.members].sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)))) rows.push([m.createdAt,m.nombre,m.apellido,m.telefono,m.email,m.etapa,m.ciudad,m.whatsapp?'Sí':'No',m.correo?'Sí':'No',m.origen,m.pedido]);
