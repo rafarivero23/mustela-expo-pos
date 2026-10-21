@@ -19,7 +19,7 @@ vercel.json       headers
 ## Setup (about 15 min)
 
 1. **Supabase**: create a project (free tier is fine). Pick the **South America (São Paulo)** or **US East** region, which are the closest to Mexico.
-2. **SQL Editor**: run `supabase/schema.sql`, then `supabase/002_product_images.sql` (photo storage) and `supabase/003_dermo_consejera.sql`, then edit the staff email in `supabase/seed.sql` and run it.
+2. **SQL Editor**: run `supabase/schema.sql`, then `supabase/002_product_images.sql` (photo storage) , `supabase/003_dermo_consejera.sql` and `supabase/004_caja_devoluciones_factura.sql`, then edit the staff email in `supabase/seed.sql` and run it.
 3. **Authentication → Providers → Email**: turn **off** "Allow new users to sign up". Then under **Authentication → Users → Add user**, create each staff member with email and password, ticking "Auto confirm". Every staff email must also be in the `staff` table:
    ```sql
    insert into staff (email, nombre) values ('persona@optimistinc.mx', 'Nombre');

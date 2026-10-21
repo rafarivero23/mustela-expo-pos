@@ -162,6 +162,8 @@ td input.n{width:90px;text-align:right}
 @media (prefers-reduced-motion:no-preference){.pcard,.orow,.chip,.btn{transition:background .15s,border-color .15s,box-shadow .15s}}
 
 /* v2 additions */
+.addline select{min-height:44px}
+.rethist{display:grid;gap:6px;font-size:14px;border-top:1.5px dashed var(--line);padding-top:10px}
 .pimg{aspect-ratio:4/3;border-radius:12px;background:var(--soft);display:grid;place-items:center;overflow:hidden;margin:-4px -4px 4px}
 .pimg img{width:100%;height:100%;object-fit:contain;display:block}
 .pimg .ph{font-weight:800;font-size:28px;letter-spacing:-.02em;color:var(--bleu);opacity:.35}
@@ -281,6 +283,7 @@ a{color:var(--accent)}
           <label class="f" id="c-conseWrap" hidden>Dermo-Consejera que te atendió
             <select id="c-consejera"><option value="">Selecciona…</option></select>
           </label>
+          <label class="check"><input type="checkbox" id="c-factura"><span><b>¿Vas a requerir factura?</b><br><span class="muted">Te pediremos tus datos fiscales en caja.</span></span></label>
           <div class="community">
             <label class="check"><input type="checkbox" id="c-join" checked><span><b>Quiero unirme a la Comunidad Mustela</b><br><span class="muted">Consejos para el cuidado de la piel de tu bebé, lanzamientos y beneficios exclusivos.</span></span></label>
             <div id="c-joinFields" class="grid2">
@@ -366,8 +369,8 @@ a{color:var(--accent)}
         <div class="colh"><h2>Por cobrar</h2><span class="pill p-pend num" id="pendCount">0</span></div>
         <input id="cajaSearch" placeholder="Buscar número o nombre" autocomplete="off">
         <div class="olist" id="pendList"></div>
-        <details>
-          <summary class="muted" style="cursor:pointer;font-weight:600">Cobrados recientes</summary>
+        <details id="paidDetails">
+          <summary class="muted" style="cursor:pointer;font-weight:600">Cobrados (abrir para devoluciones)</summary>
           <div class="olist" id="paidList" style="margin-top:8px"></div>
         </details>
       </div>
@@ -391,6 +394,23 @@ a{color:var(--accent)}
           <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between">
             <span id="cancelArea"><button type="button" class="btn danger" id="cancelBtn">Cancelar pedido</button></span>
             <button type="button" class="btn ok big" id="payBtn" disabled>Cobrado · enviar a surtido</button>
+          </div>
+        </div>
+        <div id="retOpen" hidden><button type="button" class="btn ghost" id="retStart">Devolver productos</button></div>
+        <div id="retPanel" hidden style="display:grid;gap:14px">
+          <p class="banner warn" style="margin:0">Marca con + cuántas piezas devuelve el cliente. Regresan al inventario y se registra el reembolso.</p>
+          <div><p class="eyebrow" style="margin:0 0 8px">Reembolso por</p>
+            <div class="methods" id="retMethods">
+              <button type="button" data-rm="Tarjeta">Tarjeta</button>
+              <button type="button" data-rm="Efectivo">Efectivo</button>
+              <button type="button" data-rm="Transferencia">Transferencia</button>
+            </div>
+          </div>
+          <label class="f">Motivo (opcional)<input id="retReason" autocomplete="off" maxlength="200" placeholder="Ej. producto equivocado"></label>
+          <p id="retErr" class="banner bad" hidden></p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between">
+            <button type="button" class="btn ghost" id="retCancel">Cancelar</button>
+            <button type="button" class="btn danger big" id="retGo" disabled>Devolver</button>
           </div>
         </div>
       </div>

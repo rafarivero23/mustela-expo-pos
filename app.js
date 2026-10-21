@@ -23,7 +23,7 @@ const S = {
   cart:{}, cat:'Todos', step:'shop', busy:false,
   // staff
   session:null, isStaff:false, staffLoaded:false,
-  products:[], orders:[], members:[], avail:{}, cfg:{evento:'Expo', kiosk_pin:'2026', privacy_url:'', hold_minutes:30},
+  products:[], orders:[], members:[], returns:[], retIdx:{}, retQty:{}, retMode:false, retMethod:null, avail:{}, cfg:{evento:'Expo', kiosk_pin:'2026', privacy_url:'', hold_minutes:30},
   sel:null, method:null, cancelArm:false, ticks:{}, invPending:false,
 };
 
@@ -38,6 +38,7 @@ function toast(msg){ const t=$('toast'); t.textContent=msg; t.hidden=false; clea
 // Server error codes (raised in schema.sql) → Spanish copy
 function errMsg(e){
   const m = String(e?.message || e || '');
+  if (m.includes('devolucion_excede:')) return `No se pueden devolver más piezas de ${m.split('devolucion_excede:')[1]} de las que se vendieron.`;
   if (m.startsWith('sin_stock:')) return `Ya no hay suficientes piezas de ${m.slice(10)}. Ajusta el pedido.`;
   const map = {
     nombre_requerido:'Escribe tu nombre.', telefono_invalido:'Escribe tu celular a 10 dígitos.',
@@ -46,7 +47,7 @@ function errMsg(e){
     producto_no_disponible:'Un producto ya no está disponible. Revisa tu pedido.', cantidad_invalida:'Revisa las cantidades del pedido.',
     no_autorizado:'Tu usuario no tiene acceso de personal.', pedido_no_existe:'Ese pedido no existe.',
     pedido_ya_procesado:'Ese pedido ya fue procesado en otro dispositivo.', cambio_invalido:'Ese pedido cambió en otro dispositivo. Revisa la lista.',
-    metodo_invalido:'Elige la forma de pago.', sin_numeros:'No se pudo generar el número. Intenta de nuevo.',
+    metodo_invalido:'Elige la forma de pago.', pedido_no_cobrado:'Solo se pueden devolver pedidos cobrados.', producto_no_en_pedido:'Ese producto no está en el pedido.', devolucion_vacia:'Marca al menos una pieza para devolver.', sin_numeros:'No se pudo generar el número. Intenta de nuevo.',
   };
   for (const k in map) if (m.includes(k)) return map[k];
   if (/fetch|network|Failed/i.test(m)) return 'Sin conexión. Revisa el internet e intenta de nuevo.';
@@ -217,7 +218,7 @@ $('k-form').onsubmit=async e=>{
   try{
     const res = await rpc('create_order',{
       p_items: items.map(i=>({pid:i.pid, qty:i.qty})),
-      p_customer: { nombre, apellido, telefono:tel, email, privacidad:true, consejera:$('c-consejera').value },
+      p_customer: { nombre, apellido, telefono:tel, email, privacidad:true, consejera:$('c-consejera').value, factura:$('c-factura').checked },
       p_community: join,
       p_member: { etapa:$('c-etapa').value, ciudad:$('c-ciudad').value.trim(), whatsapp:$('c-wa').checked, correo:$('c-mail').checked },
     });
@@ -257,7 +258,7 @@ $('mAgain').onclick=resetCommunity;
 
 /* ============================ STAFF DATA ============================ */
 const normOrder = o => ({ number:o.number, items:o.items||[], total:Number(o.total)||0, customer:o.customer||{}, community:o.community, status:o.status,
-  consejera:o.consejera||'', createdAt:o.created_at, paidAt:o.paid_at, payMethod:o.pay_method, payRef:o.pay_ref, readyAt:o.ready_at, deliveredAt:o.delivered_at, cancelledAt:o.cancelled_at });
+  consejera:o.consejera||'', factura:!!o.factura, createdAt:o.created_at, paidAt:o.paid_at, payMethod:o.pay_method, payRef:o.pay_ref, readyAt:o.ready_at, deliveredAt:o.delivered_at, cancelledAt:o.cancelled_at });
 const normProduct = p => ({ ...p, price:Number(p.price)||0, order:p.sort_order });
 const normMember = m => ({ ...m, createdAt:m.created_at });
 
@@ -267,6 +268,7 @@ async function load(what){
     if(what==='products'){ const {data,error}=await sb.from('products').select('*').order('sort_order').order('name'); if(error) throw error; S.products=data.map(normProduct); }
     if(what==='orders'){ const {data,error}=await sb.from('orders').select('*').order('created_at',{ascending:false}).limit(2000); if(error) throw error; S.orders=data.map(normOrder); }
     if(what==='members'){ const {data,error}=await sb.from('members').select('*').order('created_at',{ascending:false}).limit(5000); if(error) throw error; S.members=data.map(normMember); }
+    if(what==='returns'){ const {data,error}=await sb.from('returns').select('*').order('created_at').limit(5000); if(error) throw error; S.returns=data; indexReturns(); }
     if(what==='settings'){ const {data,error}=await sb.from('settings').select('*').eq('id',1).maybeSingle(); if(error) throw error; if(data) S.cfg=data; }
     if(what==='avail'){ const data=await rpc('product_availability'); S.avail=Object.fromEntries(data.map(r=>[r.id,r])); }
     $('dbBanner').hidden=true;
@@ -281,8 +283,9 @@ async function startStaff(){
     .on('postgres_changes',{event:'*',schema:'public',table:'products'},()=>queue('products','avail'))
     .on('postgres_changes',{event:'*',schema:'public',table:'members'},()=>queue('members'))
     .on('postgres_changes',{event:'*',schema:'public',table:'settings'},()=>queue('settings'))
-    .subscribe(st=>{ if(st==='SUBSCRIBED') queue('products','orders','members','settings','avail'); });
-  await Promise.all(['products','orders','members','settings','avail'].map(load));
+    .on('postgres_changes',{event:'*',schema:'public',table:'returns'},()=>queue('returns','avail'))
+    .subscribe(st=>{ if(st==='SUBSCRIBED') queue('products','orders','members','settings','returns','avail'); });
+  await Promise.all(['products','orders','members','settings','returns','avail'].map(load));
   S.staffLoaded=true; renderAll();
   // Safety net if realtime drops (venue Wi-Fi): full refresh every 30 s; also ages "hace X min".
   staffTick=setInterval(()=>{ if(STAFF.includes(S.view)) queue('orders','avail'); },30000);
@@ -294,46 +297,116 @@ const STATUS={pendiente:['Por cobrar','p-pend'],pagado:['Por surtir','p-paid'],l
 const pill = st => `<span class="pill ${STATUS[st]?.[1]||''}">${STATUS[st]?.[0]||esc(st)}</span>`;
 const fullName = c => [c?.nombre,c?.apellido].filter(Boolean).join(' ');
 
+function retInfo(number){ return S.retIdx?.[number] || { qty:{}, amount:0, list:[] }; }
+function indexReturns(){
+  const idx={};
+  for(const r of S.returns){ const x=idx[r.order_number]||(idx[r.order_number]={qty:{},amount:0,list:[]});
+    x.amount+=Number(r.amount)||0; x.list.push(r); for(const i of r.items||[]) x.qty[i.pid]=(x.qty[i.pid]||0)+(i.qty||0); }
+  S.retIdx=idx;
+}
+const netTotal = o => (o.total||0) - retInfo(o.number).amount;
+const netUnits = o => (o.items||[]).reduce((a,i)=>a+i.qty,0) - Object.values(retInfo(o.number).qty).reduce((a,b)=>a+b,0);
 function renderCaja(){
   const q=$('cajaSearch').value.trim().toLowerCase();
+  const match=o=>!q||o.number.toLowerCase().includes(q)||fullName(o.customer).toLowerCase().includes(q);
   const pend=S.orders.filter(o=>o.status==='pendiente').sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)));
-  const shown=pend.filter(o=>!q||o.number.toLowerCase().includes(q)||fullName(o.customer).toLowerCase().includes(q));
+  const shown=pend.filter(match);
   $('pendCount').textContent=pend.length;
-  const row=o=>`<button class="orow" data-sel="${esc(o.number)}" aria-pressed="${S.sel===o.number}"><span><span class="c">${esc(o.number)}</span><br><span class="muted" style="font-size:14px">${esc(fullName(o.customer))} · ${ago(o.createdAt)}</span></span><span class="num" style="font-weight:800">${money(o.total)}</span></button>`;
-  $('pendList').innerHTML = !S.staffLoaded?'<div class="empty">Cargando…</div>':shown.length?shown.map(row).join(''):`<div class="empty">${q?'Sin resultados':'No hay pedidos por cobrar.'}</div>`;
-  const paid=S.orders.filter(o=>SOLD.includes(o.status)).sort((a,b)=>String(b.paidAt).localeCompare(String(a.paidAt))).slice(0,12);
-  $('paidList').innerHTML = paid.length?paid.map(o=>`<button class="orow" data-sel="${esc(o.number)}" aria-pressed="${S.sel===o.number}"><span><span class="c">${esc(o.number)}</span><br><span class="muted" style="font-size:14px">${esc(o.payMethod||'')} · ${hhmm(o.paidAt)}</span></span>${pill(o.status)}</button>`).join(''):'<div class="empty">Aún no hay cobros.</div>';
+  const row=o=>`<button class="orow" data-sel="${esc(o.number)}" aria-pressed="${S.sel===o.number}"><span><span class="c">${esc(o.number)}</span><br><span class="muted" style="font-size:14px">${esc(fullName(o.customer))} · ${ago(o.createdAt)}${o.factura?' · <b>Factura</b>':''}</span></span><span class="num" style="font-weight:800">${money(o.total)}</span></button>`;
+  $('pendList').innerHTML = !S.staffLoaded?'<div class="empty">Cargando…</div>':shown.length?shown.map(row).join(''):`<div class="empty">${q?'Sin pendientes con esa búsqueda':'No hay pedidos por cobrar.'}</div>`;
+  let paid=S.orders.filter(o=>SOLD.includes(o.status)&&match(o)).sort((a,b)=>String(b.paidAt).localeCompare(String(a.paidAt)));
+  if(!q) paid=paid.slice(0,15);
+  if(q && paid.length) $('paidDetails').open=true;
+  $('paidList').innerHTML = paid.length?paid.map(o=>{ const r=retInfo(o.number).amount; return `<button class="orow" data-sel="${esc(o.number)}" aria-pressed="${S.sel===o.number}"><span><span class="c">${esc(o.number)}</span><br><span class="muted" style="font-size:14px">${esc(fullName(o.customer))} · ${esc(o.payMethod||'')} · ${hhmm(o.paidAt)}${r?` · <b>Devuelto ${money(r)}</b>`:''}</span></span>${pill(o.status)}</button>`; }).join(''):`<div class="empty">${q?'Sin cobrados con esa búsqueda':'Aún no hay cobros.'}</div>`;
   renderCajaDetail();
 }
 function renderCajaDetail(){
   const o=S.orders.find(x=>x.number===S.sel);
   $('cajaEmpty').hidden=!!o; $('cajaDetail').hidden=!o;
   $('payPanel').hidden=!(o&&o.status==='pendiente');
+  const sold=o&&SOLD.includes(o.status), ri=o?retInfo(o.number):null;
+  const returnable=sold?(o.items||[]).some(i=>i.qty-(ri.qty[i.pid]||0)>0):false;
+  if(!sold||!returnable) S.retMode=false;
+  $('retOpen').hidden=!(sold&&returnable&&!S.retMode);
+  $('retPanel').hidden=!(sold&&S.retMode);
   if(!o) return;
+  if(document.activeElement?.id==='addPid'){ S.cajaPending=true; return; }
   const editable=o.status==='pendiente';
   const c=o.customer||{};
+  const inOrder=Object.fromEntries((o.items||[]).map(i=>[i.pid,i.qty]));
+  const addSel = editable ? `<div class="addline"><select id="addPid" aria-label="Agregar producto"><option value="">+ Agregar producto…</option>${[...S.products].filter(p=>p.active!==false).sort((a,b)=>(a.order??999)-(b.order??999)).map(p=>{ const left=(S.avail[p.id]?.free??0)-(inOrder[p.id]||0); return `<option value="${p.id}"${left<=0?' disabled':''}>${esc(p.name)} ${esc(p.size||'')} · ${money(p.price)}${left<=0?' (sin stock)':''}</option>`; }).join('')}</select></div>` : '';
+  const lineHtml=(i,ix)=>{
+    const r=ri.qty[i.pid]||0, left=i.qty-r;
+    if(editable){ const short=i.qty>(S.avail[i.pid]?.free??0);
+      return `<div class="line"><div class="nm"><span class="mini-step"><button data-q="${ix}" data-d="-1" aria-label="Quitar">−</button><b class="num" style="min-width:24px;text-align:center">${i.qty}</b><button data-q="${ix}" data-d="1" aria-label="Agregar">+</button></span> ${esc(i.name)} <span class="muted">${esc(i.size||'')}</span>${short?' <span class="pill p-cancel">Sin stock</span>':''}</div><span class="num">${money(i.price*i.qty)}</span></div>`; }
+    const rq=S.retQty[i.pid]||0;
+    const retCtl = S.retMode&&left>0 ? `<span class="mini-step" style="margin-left:8px"><button data-rq="${esc(i.pid)}" data-rd="-1" aria-label="Menos">−</button><b class="num" style="min-width:24px;text-align:center;color:var(--bad)">${rq}</b><button data-rq="${esc(i.pid)}" data-rd="1" data-max="${left}" aria-label="Más">+</button></span>` : '';
+    return `<div class="line"><div class="nm"><b>${i.qty} ×</b> ${esc(i.name)} <span class="muted">${esc(i.size||'')}</span>${r?` <span class="pill p-cancel">${r} devuelto${r>1?'s':''}</span>`:''}${retCtl}</div><span class="num">${money(i.price*i.qty)}</span></div>`;
+  };
+  const refunded=ri.amount;
   $('cajaDetail').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-      <div><p class="eyebrow" style="margin:0">Pedido · ${hhmm(o.createdAt)}</p><div class="code" style="font-size:64px">${esc(o.number)}</div></div>${pill(o.status)}
+      <div><p class="eyebrow" style="margin:0">Pedido · ${hhmm(o.createdAt)}</p><div class="code" style="font-size:64px">${esc(o.number)}</div></div>
+      <div style="display:grid;gap:6px;justify-items:end">${pill(o.status)}${o.factura?'<span class="pill p-pend">Requiere factura</span>':''}</div>
     </div>
     <div><b>${esc(fullName(c))}</b><br><span class="muted">${esc(c.telefono||'')}${c.email?' · '+esc(c.email):''}</span>${o.community?'<br><span class="pill p-ready" style="margin-top:6px">Se unió a la Comunidad</span>':''}${o.consejera?`<br><span class="muted" style="font-size:14px">Atendió: <b>${esc(o.consejera)}</b></span>`:''}</div>
-    <div class="lines">${(o.items||[]).map((i,ix)=>{ const short=editable && i.qty>(S.avail[i.pid]?.free??0);
-      return `<div class="line"><div class="nm">${editable?`<span class="mini-step"><button data-q="${ix}" data-d="-1" aria-label="Quitar">−</button><b class="num" style="min-width:24px;text-align:center">${i.qty}</b><button data-q="${ix}" data-d="1" aria-label="Agregar">+</button></span>`:`<b>${i.qty} ×</b>`} ${esc(i.name)} <span class="muted">${esc(i.size||'')}</span>${short?' <span class="pill p-cancel">Sin stock</span>':''}</div><span class="num">${money(i.price*i.qty)}</span></div>`;}).join('')}
-      <div class="total num"><span>Total</span><span>${money(o.total)}</span></div></div>
-    ${o.status==='cancelado'?`<p class="muted" style="margin:0">Cancelado ${hhmm(o.cancelledAt)}</p>`:o.status!=='pendiente'?`<p class="muted" style="margin:0">Cobrado ${hhmm(o.paidAt)} · ${esc(o.payMethod||'')}${o.payRef?' · Ref. '+esc(o.payRef):''}</p>`:''}`;
-  updateChange();
+    <div class="lines">${(o.items||[]).map(lineHtml).join('')}
+      ${addSel}
+      <div class="total num"><span>Total</span><span>${money(o.total)}</span></div>
+      ${refunded?`<div class="line num" style="color:var(--bad);font-weight:700"><span>Reembolsado</span><span>−${money(refunded)}</span></div><div class="line num" style="font-weight:800;font-size:18px"><span>Neto</span><span>${money(o.total-refunded)}</span></div>`:''}
+    </div>
+    ${o.status==='cancelado'?`<p class="muted" style="margin:0">Cancelado ${hhmm(o.cancelledAt)}</p>`:o.status!=='pendiente'?`<p class="muted" style="margin:0">Cobrado ${hhmm(o.paidAt)} · ${esc(o.payMethod||'')}${o.payRef?' · Ref. '+esc(o.payRef):''}</p>`:''}
+    ${ri.list.length?`<div class="rethist"><b>Devoluciones</b>${ri.list.map(r=>`<div>${hhmm(r.created_at)} · ${(r.items||[]).map(i=>`${i.qty}× ${esc(i.name)}`).join(', ')} · <b>${money(r.amount)}</b> por ${esc(r.method)}${r.reason?` · “${esc(r.reason)}”`:''}${r.created_by?` <span class="muted">(${esc(r.created_by)})</span>`:''}</div>`).join('')}</div>`:''}`;
+  updateChange(); updateRet();
 }
-$('cajaSearch').oninput=()=>{ renderCaja(); const v=$('cajaSearch').value.trim().toUpperCase(); const hit=S.orders.find(o=>o.number===v&&o.status==='pendiente'); if(hit&&S.sel!==hit.number){ selectOrder(hit.number);} };
-function selectOrder(n){ if(S.sel!==n){ S.sel=n; S.method=null; S.cancelArm=false; $('payRef').value=''; $('cashIn').value=''; $('payErr').hidden=true; syncMethods(); renderCancel(); } renderCaja(); }
+function updateRet(){
+  const o=S.orders.find(x=>x.number===S.sel); if(!o||!S.retMode) return;
+  const amt=(o.items||[]).reduce((a,i)=>a+(S.retQty[i.pid]||0)*i.price,0), n=Object.values(S.retQty).reduce((a,b)=>a+b,0);
+  document.querySelectorAll('#retMethods button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.rm===S.retMethod)));
+  $('retGo').disabled=!(n>0&&S.retMethod);
+  $('retGo').textContent = n>0 ? `Devolver ${n} pieza${n>1?'s':''} · reembolsar ${money(amt)}` : 'Devolver';
+}
+$('retStart').onclick=()=>{ const o=S.orders.find(x=>x.number===S.sel); S.retMode=true; S.retQty={}; S.retMethod=o?.payMethod||null; $('retReason').value=''; $('retErr').hidden=true; renderCajaDetail(); };
+$('retCancel').onclick=()=>{ S.retMode=false; S.retQty={}; renderCajaDetail(); };
+$('retMethods').onclick=e=>{ const b=e.target.closest('[data-rm]'); if(!b) return; S.retMethod=b.dataset.rm; updateRet(); };
+$('retGo').onclick=async()=>{
+  const o=S.orders.find(x=>x.number===S.sel); if(!o||S.busy) return;
+  const items=Object.entries(S.retQty).filter(([,q])=>q>0).map(([pid,qty])=>({pid,qty})); if(!items.length) return;
+  S.busy=true; $('retGo').disabled=true; $('retErr').hidden=true;
+  try{
+    const r=await rpc('return_items',{ p_number:o.number, p_items:items, p_method:S.retMethod, p_reason:$('retReason').value.trim() });
+    toast(`Devolución registrada · reembolsar ${money(r.amount)} por ${S.retMethod}`);
+    S.retMode=false; S.retQty={}; queue('returns','avail');
+  }catch(ex){ $('retErr').textContent=errMsg(ex); $('retErr').hidden=false; }
+  finally{ S.busy=false; updateRet(); }
+};
+$('cajaSearch').oninput=()=>{ renderCaja(); const v=$('cajaSearch').value.trim().toUpperCase(); const hit=S.orders.find(o=>o.number===v&&o.status!=='cancelado'); if(hit&&S.sel!==hit.number){ selectOrder(hit.number);} };
+function selectOrder(n){ if(S.sel!==n){ S.sel=n; S.method=null; S.cancelArm=false; S.retMode=false; S.retQty={}; $('payRef').value=''; $('cashIn').value=''; $('payErr').hidden=true; syncMethods(); renderCancel(); } renderCaja(); }
 ['pendList','paidList'].forEach(id=>$(id).onclick=e=>{ const b=e.target.closest('[data-sel]'); if(b) selectOrder(b.dataset.sel); });
+async function saveItems(o, next){
+  S.busy=true; try{ await rpc('update_order_items',{ p_number:o.number, p_items:next }); queue('orders','avail'); }catch(ex){ toast(errMsg(ex)); } finally{ S.busy=false; }
+}
 $('cajaDetail').onclick=async e=>{
+  const rb=e.target.closest('[data-rq]');
+  if(rb){ const pid=rb.dataset.rq, cur=S.retQty[pid]||0, d=+rb.dataset.rd;
+    const o=S.orders.find(x=>x.number===S.sel); const it=o?.items.find(i=>i.pid===pid); const max=it?it.qty-(retInfo(o.number).qty[pid]||0):0;
+    S.retQty[pid]=Math.max(0,Math.min(max,cur+d)); renderCajaDetail(); return; }
   const b=e.target.closest('[data-q]'); if(!b||S.busy) return;
   const o=S.orders.find(x=>x.number===S.sel); if(!o||o.status!=='pendiente') return;
   const items=(o.items||[]).map(i=>({pid:i.pid, qty:i.qty})); const ix=+b.dataset.q; items[ix].qty+= +b.dataset.d;
   if(items[ix].qty>20){ toast('Máximo 20 piezas por producto'); return; }
   const next=items.filter(i=>i.qty>0); if(!next.length){ toast('Para quitar todo, cancela el pedido'); return; }
-  S.busy=true; try{ await rpc('update_order_items',{ p_number:o.number, p_items:next }); queue('orders','avail'); }catch(ex){ toast(errMsg(ex)); } finally{ S.busy=false; }
+  saveItems(o,next);
 };
+$('cajaDetail').addEventListener('change',e=>{
+  if(e.target.id!=='addPid') return;
+  const pid=e.target.value; e.target.blur(); if(!pid||S.busy){ renderCajaDetail(); return; }
+  const o=S.orders.find(x=>x.number===S.sel); if(!o||o.status!=='pendiente') return;
+  const items=(o.items||[]).map(i=>({pid:i.pid, qty:i.qty})); const ex=items.find(i=>i.pid===pid);
+  if(ex) ex.qty+=1; else items.push({pid, qty:1});
+  saveItems(o,items); toast('Producto agregado');
+});
+$('cajaDetail').addEventListener('focusout',e=>{ if(e.target.id==='addPid'&&S.cajaPending){ S.cajaPending=false; setTimeout(renderCajaDetail,0); } });
 function syncMethods(){ document.querySelectorAll('#methods button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.m===S.method))); $('cashWrap').hidden=S.method!=='Efectivo'; $('refWrap').hidden=S.method==='Efectivo'; $('payBtn').disabled=!S.method; updateChange(); }
 $('methods').onclick=e=>{ const b=e.target.closest('[data-m]'); if(!b) return; S.method=b.dataset.m; syncMethods(); if(S.method==='Efectivo') $('cashIn').focus(); };
 function updateChange(){ const o=S.orders.find(x=>x.number===S.sel); const v=parseFloat(String($('cashIn').value).replace(/[^0-9.]/g,'')); const show=S.method==='Efectivo'&&o&&!isNaN(v); $('change').hidden=!show; if(show){ const d=v-o.total; $('change').textContent= d>=0?`Cambio: ${money(d)}`:`Faltan ${money(-d)}`; $('change').style.color=d>=0?'var(--ok)':'var(--bad)'; } }
@@ -367,7 +440,7 @@ function renderSurtido(){
   const done=S.orders.filter(o=>o.status==='entregado').length; $('cntDone').textContent= done?`${done} pedidos entregados.`:'';
   const card=(o,mode)=>`<div class="ticket"><div class="th"><span class="c">${esc(o.number)}</span><span class="muted" style="font-size:14px">${mode==='paid'?'Pagado '+ago(o.paidAt):'Listo '+ago(o.readyAt)}</span></div>
     <div><b>${esc(fullName(o.customer))}</b></div>
-    <ul>${(o.items||[]).map((i,ix)=>{const k=o.number+':'+ix; return mode==='paid'?`<li><label><input type="checkbox" data-tick="${esc(k)}" ${S.ticks[k]?'checked':''}><span class="q num">${i.qty}×</span><span>${esc(i.name)} <span class="muted">${esc(i.size||'')}</span></span></label></li>`:`<li><span class="q num">${i.qty}×</span> ${esc(i.name)} <span class="muted">${esc(i.size||'')}</span></li>`;}).join('')}</ul>
+    <ul>${(o.items||[]).map((i,ix)=>{const k=o.number+':'+ix; const rq=retInfo(o.number).qty[i.pid]||0, nq=i.qty-rq; if(nq<=0) return ''; return mode==='paid'?`<li><label><input type="checkbox" data-tick="${esc(k)}" ${S.ticks[k]?'checked':''}><span class="q num">${nq}×</span><span>${esc(i.name)} <span class="muted">${esc(i.size||'')}</span></span></label></li>`:`<li><span class="q num">${nq}×</span> ${esc(i.name)} <span class="muted">${esc(i.size||'')}</span></li>`;}).join('')}</ul>
     ${mode==='paid'?`<button class="btn primary" data-ready="${esc(o.number)}">Listo para entregar</button>`:`<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ok" data-deliver="${esc(o.number)}">Entregado</button><button class="btn ghost sm" data-back="${esc(o.number)}">Regresar a surtir</button></div>`}</div>`;
   $('colPaid').innerHTML=paid.length?paid.map(o=>card(o,'paid')).join(''):'<div class="panel empty">Nada por surtir.</div>';
   $('colReady').innerHTML=ready.length?ready.map(o=>card(o,'ready')).join(''):'<div class="panel empty">Nada pendiente de entrega.</div>';
@@ -384,9 +457,9 @@ $('v-surtido').onclick=async e=>{
 /* ---------- INVENTARIO ---------- */
 function renderInv(){
   const paid=S.orders.filter(o=>SOLD.includes(o.status));
-  const sales=paid.reduce((s,o)=>s+(o.total||0),0), units=paid.reduce((s,o)=>s+(o.items||[]).reduce((a,i)=>a+i.qty,0),0);
+  const sales=paid.reduce((s,o)=>s+netTotal(o),0), units=paid.reduce((s,o)=>s+netUnits(o),0), refunds=S.returns.reduce((s,r)=>s+(Number(r.amount)||0),0);
   const pend=S.orders.filter(o=>o.status==='pendiente').length;
-  $('tiles').innerHTML=[['Ventas cobradas',money(sales)],['Pedidos cobrados',paid.length],['Ticket promedio',money(paid.length?sales/paid.length:0)],['Piezas vendidas',units],['Por cobrar',pend],['Registros Comunidad',S.staffLoaded?S.members.length:'…']]
+  $('tiles').innerHTML=[['Ventas cobradas',money(sales)],['Pedidos cobrados',paid.length],['Ticket promedio',money(paid.length?sales/paid.length:0)],['Piezas vendidas',units],['Por cobrar',pend],['Devoluciones',money(refunds)],['Registros Comunidad',S.staffLoaded?S.members.length:'…']]
     .map(([k,v])=>`<div class="tile"><span class="eyebrow">${k}</span><b class="num">${v}</b></div>`).join('');
   $('sampleNote').hidden=!S.products.some(p=>p.sample);
   $('catList').innerHTML=[...new Set(S.products.map(p=>p.category).filter(Boolean))].map(c=>`<option value="${esc(c)}">`).join('');
@@ -407,7 +480,7 @@ function renderInv(){
       <td><input type="checkbox" data-f="active" data-id="${p.id}" ${p.active!==false?'checked':''} aria-label="Visible en tienda"></td></tr>`;}).join('')
       :`<tr><td colspan="10" class="empty">${S.staffLoaded?'Sin productos. Agrega el primero abajo.':'Cargando…'}</td></tr>`;
   }
-  const byC={}; for(const o of paid){ const k=o.consejera||'Sin consejera'; const r=byC[k]||(byC[k]={n:0,u:0,t:0}); r.n++; r.t+=o.total||0; r.u+=(o.items||[]).reduce((a,i)=>a+i.qty,0); }
+  const byC={}; for(const o of paid){ const k=o.consejera||'Sin consejera'; const r=byC[k]||(byC[k]={n:0,u:0,t:0}); r.n++; r.t+=netTotal(o); r.u+=netUnits(o); }
   const cr=Object.entries(byC).sort((a,b)=>b[1].t-a[1].t);
   $('conseBody').innerHTML=cr.length?cr.map(([k,r])=>`<tr><td>${esc(k)}</td><td class="r num">${r.n}</td><td class="r num">${r.u}</td><td class="r num">${money(r.t)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Aún no hay ventas cobradas.</td></tr>';
   const ms=S.members.slice(0,25);
@@ -489,9 +562,9 @@ function save(filename,text){
   setTimeout(()=>URL.revokeObjectURL(url),2000); $('expNote').textContent=`${filename} listo.`;
 }
 const stamp=()=>new Date().toISOString().slice(0,10);
-$('expOrders').onclick=async()=>{ await load('orders');
-  const rows=[['Pedido','Estado','Creado','Cobrado','Forma de pago','Referencia','Nombre','Apellido','Celular','Correo','Comunidad','Dermo-Consejera','Producto','Tamaño','Cantidad','Precio','Subtotal','Total pedido']];
-  for(const o of [...S.orders].sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)))) for(const i of o.items||[]) rows.push([o.number,STATUS[o.status]?.[0]||o.status,o.createdAt,o.paidAt||'',o.payMethod||'',o.payRef||'',o.customer?.nombre,o.customer?.apellido,o.customer?.telefono,o.customer?.email,o.community?'Sí':'No',o.consejera||'',i.name,i.size,i.qty,i.price,i.qty*i.price,o.total]);
+$('expOrders').onclick=async()=>{ await Promise.all([load('orders'),load('returns')]);
+  const rows=[['Pedido','Estado','Creado','Cobrado','Forma de pago','Referencia','Nombre','Apellido','Celular','Correo','Comunidad','Dermo-Consejera','Factura','Producto','Tamaño','Cantidad','Devuelto','Precio','Subtotal','Total pedido','Reembolso pedido','Neto pedido']];
+  for(const o of [...S.orders].sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)))) for(const i of o.items||[]) rows.push([o.number,STATUS[o.status]?.[0]||o.status,o.createdAt,o.paidAt||'',o.payMethod||'',o.payRef||'',o.customer?.nombre,o.customer?.apellido,o.customer?.telefono,o.customer?.email,o.community?'Sí':'No',o.consejera||'',o.factura?'Sí':'No',i.name,i.size,i.qty,retInfo(o.number).qty[i.pid]||0,i.price,i.qty*i.price,o.total,retInfo(o.number).amount,netTotal(o)]);
   save(`mustela-pedidos-${stamp()}.csv`,csv(rows)); };
 $('expMembers').onclick=async()=>{ await load('members');
   const rows=[['Fecha','Nombre','Apellido','Celular','Correo','Etapa','Ciudad','WhatsApp','Correos','Origen','Pedido']];
@@ -623,6 +696,6 @@ async function boot(){
     if(KIOSK.includes(S.view) && !KIOSK.includes(v)){ history.replaceState(null,'','#'+S.view); return askPin(v); }
     go(v);
   });
-  window.addEventListener('online',()=>{ loadKiosk(); if(S.isStaff) queue('products','orders','members','settings','avail'); });
+  window.addEventListener('online',()=>{ loadKiosk(); if(S.isStaff) queue('products','orders','members','settings','returns','avail'); });
 }
 boot();
