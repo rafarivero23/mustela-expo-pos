@@ -500,14 +500,17 @@ function renderInv(){
       <td><div class="thumbcell"><div class="thumb">${p.image_url?`<img src="${esc(p.image_url)}" alt="">`:'<span class="muted" style="font-size:12px">—</span>'}</div>
         <div class="thumbbtns"><label class="linkbtn">${p.image_url?'Cambiar':'Subir'}<input class="vh" type="file" accept="image/*" data-img="${p.id}"></label>${p.image_url?`<button type="button" class="linkbtn rm" data-rmimg="${p.id}">Quitar</button>`:''}</div></div></td>
       <td><input data-f="name" data-id="${p.id}" value="${esc(p.name)}" aria-label="Nombre">${p.sample?' <span class="pill p-pend" style="margin-top:4px">Ejemplo</span>':''}</td>
+      <td><input data-f="codigo" data-id="${p.id}" value="${esc(p.codigo||'')}" aria-label="Código" style="width:110px"></td>
+      <td><input data-f="sku" data-id="${p.id}" value="${esc(p.sku||'')}" aria-label="SKU" style="width:140px"></td>
       <td><input data-f="category" data-id="${p.id}" value="${esc(p.category||'')}" aria-label="Línea" style="min-width:120px"></td>
       <td><input data-f="size" data-id="${p.id}" value="${esc(p.size||'')}" aria-label="Tamaño" style="width:90px"></td>
       <td class="r"><input class="n num" data-f="price" data-id="${p.id}" value="${esc(p.price)}" inputmode="decimal" aria-label="Precio"></td>
-      <td class="r"><input class="n num" data-f="stock" data-id="${p.id}" value="${esc(p.stock)}" inputmode="numeric" aria-label="Stock"></td>
+      <td class="r"><input class="n num" data-f="stock" data-id="${p.id}" value="${esc(p.stock)}" inputmode="numeric" aria-label="Inventario inicial"></td>
+      <td class="r"><input class="n num" data-f="restock" data-id="${p.id}" value="${esc(p.restock||0)}" inputmode="numeric" aria-label="Resurtido"></td>
       <td class="r num">${i.sold}</td><td class="r num">${i.held}</td>
       <td class="r num ${i.available<=3?'lowstock':''}">${i.available}</td>
       <td><input type="checkbox" data-f="active" data-id="${p.id}" ${p.active!==false?'checked':''} aria-label="Visible en tienda"></td></tr>`;}).join('')
-      :`<tr><td colspan="10" class="empty">${S.staffLoaded?'Sin productos. Agrega el primero abajo.':'Cargando…'}</td></tr>`;
+      :`<tr><td colspan="13" class="empty">${S.staffLoaded?'Sin productos. Agrega el primero abajo.':'Cargando…'}</td></tr>`;
   }
   const byC={}; for(const o of paid){ const k=o.consejera||'Sin consejera'; const r=byC[k]||(byC[k]={n:0,u:0,t:0}); r.n++; r.t+=netTotal(o); r.u+=netUnits(o); }
   const cr=Object.entries(byC).sort((a,b)=>b[1].t-a[1].t);
@@ -561,7 +564,7 @@ $('invWrap').addEventListener('change',async e=>{
   const el=e.target;
   if(el.dataset.img){ const f=el.files?.[0]; el.value=''; el.blur(); return uploadImage(el.dataset.img, f); } const id=el.dataset.id, f=el.dataset.f; if(!id||!f) return;
   let v = f==='active'?el.checked : el.value.trim();
-  if(f==='price'||f==='stock'){ v=Number(String(v).replace(/[^0-9.]/g,'')); if(isNaN(v)||v<0){ toast('Escribe un número válido'); return; } if(f==='stock') v=Math.round(v); }
+  if(f==='price'||f==='stock'||f==='restock'){ v=Number(String(v).replace(/[^0-9.]/g,'')); if(isNaN(v)||v<0){ toast('Escribe un número válido'); return; } if(f!=='price') v=Math.round(v); }
   if(f==='name'&&!v){ toast('El nombre no puede quedar vacío'); return; }
   const patch={[f]:v}; if(f!=='active') patch.sample=false;
   const { error } = await sb.from('products').update(patch).eq('id',id);
@@ -570,7 +573,7 @@ $('invWrap').addEventListener('change',async e=>{
 $('addForm').onsubmit=async e=>{
   e.preventDefault(); const name=$('a-name').value.trim(), price=Number($('a-price').value.replace(/[^0-9.]/g,'')), stock=Math.round(Number($('a-stock').value.replace(/[^0-9]/g,''))||0);
   if(!name) return toast('Escribe el nombre del producto'); if(!(price>0)) return toast('Escribe el precio');
-  const { error } = await sb.from('products').insert({ name, category:$('a-cat').value.trim(), size:$('a-size').value.trim(), price, stock, active:true, sort_order:S.products.length+1, sample:false });
+  const { error } = await sb.from('products').insert({ name, codigo:$('a-codigo').value.trim(), sku:$('a-sku').value.trim(), category:$('a-cat').value.trim(), size:$('a-size').value.trim(), price, stock, active:true, sort_order:S.products.length+1, sample:false });
   if(error) toast(errMsg(error)); else { $('addForm').reset(); toast('Producto agregado'); queue('products','avail'); }
 };
 $('cfgForm').onsubmit=async e=>{
@@ -595,6 +598,32 @@ $('expOrders').onclick=async()=>{ await Promise.all([load('orders'),load('return
   const rows=[['Pedido','Estado','Creado','Cobrado','Forma de pago','Referencia','Nombre','Apellido','Celular','Correo','Comunidad','Dermo-Consejera','Factura','Producto','Tamaño','Cantidad','Devuelto','Precio','Subtotal','Total pedido','Reembolso pedido','Neto pedido']];
   for(const o of [...S.orders].sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)))) for(const i of o.items||[]) rows.push([o.number,(STATUS[o.status]?.[0]||o.status)+(retInfo(o.number).amount?(netUnits(o)<=0?' · Devuelto total':' · Con devolución'):''),o.createdAt,o.paidAt||'',o.payMethod||'',o.payRef||'',o.customer?.nombre,o.customer?.apellido,o.customer?.telefono,o.customer?.email,o.community?'Sí':'No',o.consejera||'',o.factura?'Sí':'No',i.name,i.size,i.qty,retInfo(o.number).qty[i.pid]||0,i.price,i.qty*i.price,o.total,retInfo(o.number).amount,netTotal(o)]);
   save(`mustela-pedidos-${stamp()}.csv`,csv(rows)); };
+// Long numeric codes (EAN) as text so Excel doesn't turn them into 3.5E+12
+const xtxt = v => v ? `="${v}"` : '';
+/* Inventario y ventas: inicial, resurtido, vendido (unidades y $ netos de devoluciones), final. Agrupado por línea. */
+async function exportInvSales(){
+  await Promise.all([load('products'),load('orders'),load('returns')]);
+  const u={}, m={};
+  for(const o of S.orders){ if(!SOLD.includes(o.status)) continue; for(const i of o.items||[]){ u[i.pid]=(u[i.pid]||0)+i.qty; m[i.pid]=(m[i.pid]||0)+i.qty*i.price; } }
+  for(const r of S.returns) for(const i of r.items||[]){ u[i.pid]=(u[i.pid]||0)-(i.qty||0); m[i.pid]=(m[i.pid]||0)-(i.qty||0)*(Number(i.price)||0); }
+  const head=['Código','SKU','Descripción','Inv. inicial','Resurtido','Inv. final','Vendido (unidades)','Precio','Ventas ($)'];
+  const prods=[...S.products].sort((a,b)=>(a.order??999)-(b.order??999)||String(a.name).localeCompare(b.name));
+  const cats=[...new Set(prods.map(p=>p.category||'Sin línea'))];
+  const rows=[['Inventario y ventas',S.cfg.evento||'Expo'],['Generado',new Date().toLocaleString('es-MX',{timeZone:TZ})],[],head];
+  const T={ini:0,res:0,fin:0,u:0,m:0};
+  for(const c of cats){
+    rows.push(['',c.toUpperCase()]);
+    for(const p of prods.filter(p=>(p.category||'Sin línea')===c)){
+      const sold=u[p.id]||0, money_=Math.round((m[p.id]||0)*100)/100, ini=p.stock||0, res=p.restock||0, fin=ini+res-sold;
+      rows.push([xtxt(p.codigo),xtxt(p.sku),[p.name,p.size].filter(Boolean).join(' '),ini,res,fin,sold,p.price,money_]);
+      T.ini+=ini; T.res+=res; T.fin+=fin; T.u+=sold; T.m+=money_;
+    }
+  }
+  rows.push([],['','TOTAL','',T.ini,T.res,T.fin,T.u,'',Math.round(T.m*100)/100]);
+  save(`mustela-inventario-ventas-${stamp()}.csv`,csv(rows));
+}
+$('expInvSales').onclick=exportInvSales;
+$('corteInv').onclick=exportInvSales;
 $('expReturns').onclick=async()=>{ await Promise.all([load('orders'),load('returns')]);
   const rows=[['Fecha devolución','Pedido','Fecha pedido','Nombre','Apellido','Celular','Correo','Dermo-Consejera','Producto','Tamaño','Piezas devueltas','Precio','Reembolso línea','Reembolso total devolución','Método de reembolso','Motivo','Registró']];
   for(const r of [...S.returns].sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)))){
@@ -626,8 +655,8 @@ function parseCSV(text){
   return rows.filter(r=>r.some(v=>String(v).trim()!==''));
 }
 const norm=s=>String(s??'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
-const COLS={ id:['id'], name:['nombre','producto','name','product'], category:['linea','categoria','category','line'],
-  size:['tamano','size','presentacion','contenido'], price:['precio','price','precio_mxn'], stock:['stock','cantidad','inventario','piezas','qty'],
+const COLS={ id:['id'], codigo:['codigo','code','clave','codigo_interno'], sku:['sku','ean','codigo_de_barras','codigo_barras','upc','barcode'], restock:['resurtido','restock','resurtidos'], name:['nombre','producto','name','product'], category:['linea','categoria','category','line'],
+  size:['tamano','size','presentacion','contenido'], price:['precio','price','precio_mxn'], stock:['stock','inv_inicial','inventario_inicial','cantidad','inventario','piezas','qty'],
   active:['visible','activo','active'], order:['orden','order','posicion'], image_url:['imagen_url','imagen','image_url','foto','image'] };
 const num=v=>{ const s=String(v??'').replace(/[^0-9.,-]/g,''); if(!s) return NaN; const t=/,\d{1,2}$/.test(s)&&!s.includes('.')?s.replace(',','.'):s.replace(/,/g,''); return Number(t); };
 const yes=v=>!/^(no|n|0|false|falso|oculto)$/i.test(String(v??'').trim());
@@ -647,8 +676,8 @@ $('impFile').onchange=async e=>{
   const byId=new Map(S.products.map(p=>[p.id,p])), byKey=new Map(S.products.map(p=>[norm(p.name)+'|'+norm(p.size),p]));
   const seen=new Set(), items=[];
   rows.slice(1).forEach((r,n)=>{
-    const g=k=>idx[k]===undefined?undefined:String(r[idx[k]]??'').trim();
-    const it={ line:n+2, name:g('name')||'', category:g('category'), size:g('size'), price:num(g('price')), stock:num(g('stock')),
+    const g=k=>idx[k]===undefined?undefined:String(r[idx[k]]??'').trim().replace(/^="(.*)"$/,'$1');
+    const it={ line:n+2, codigo:g('codigo'), sku:g('sku'), restock: idx.restock===undefined?undefined:Math.round(num(g('restock'))||0), name:g('name')||'', category:g('category'), size:g('size'), price:num(g('price')), stock:num(g('stock')),
       active: idx.active===undefined?undefined:yes(g('active')), order: idx.order===undefined?undefined:num(g('order')), image_url:g('image_url'), id:g('id') };
     const key=norm(it.name)+'|'+norm(it.size??'');
     const match=(it.id&&byId.get(it.id))||byKey.get(key);
@@ -685,6 +714,7 @@ $('importBox').addEventListener('click',async e=>{
   try{
     let nextOrder=Math.max(0,...S.products.map(p=>p.order||0));
     const row=i=>{ const r={ name:i.name, price:i.price, stock:i.stock, sample:false };
+      if(i.codigo!==undefined) r.codigo=i.codigo; if(i.sku!==undefined) r.sku=i.sku; if(i.restock!==undefined) r.restock=i.restock;
       if(i.category!==undefined) r.category=i.category; if(i.size!==undefined) r.size=i.size;
       if(i.active!==undefined) r.active=i.active; if(i.order!==undefined&&!isNaN(i.order)) r.sort_order=Math.round(i.order);
       if(i.image_url) r.image_url=i.image_url; return r; };
@@ -699,9 +729,9 @@ $('importBox').addEventListener('click',async e=>{
   finally{ S.busy=false; }
 });
 $('expCatalog').onclick=async()=>{ await load('products');
-  const rows=[['id','nombre','linea','tamaño','precio','stock','visible','orden','imagen_url']];
-  for(const p of [...S.products].sort((a,b)=>(a.order??999)-(b.order??999))) rows.push([p.id,p.name,p.category,p.size,p.price,p.stock,p.active!==false?'sí':'no',p.order??'',p.image_url||'']);
-  if(rows.length===1) rows.push(['','Ejemplo de producto','Bebé','300 ml','389','40','sí','1','']);
+  const rows=[['id','codigo','sku','nombre','linea','tamaño','precio','inv_inicial','resurtido','visible','orden','imagen_url']];
+  for(const p of [...S.products].sort((a,b)=>(a.order??999)-(b.order??999))) rows.push([p.id,xtxt(p.codigo),xtxt(p.sku),p.name,p.category,p.size,p.price,p.stock,p.restock||0,p.active!==false?'sí':'no',p.order??'',p.image_url||'']);
+  if(rows.length===1) rows.push(['','87035893','3504105035891','Ejemplo de producto','Bebé','300 ml','389','40','0','sí','1','']);
   save(`mustela-catalogo-${stamp()}.csv`,csv(rows)); };
 
 /* ---------- CORTE DE CAJA ---------- */

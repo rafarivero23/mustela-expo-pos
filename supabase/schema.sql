@@ -27,7 +27,10 @@ create table if not exists public.products (
   category    text not null default '',
   size        text not null default '',
   price       numeric(10,2) not null check (price >= 0),
-  stock       int  not null default 0 check (stock >= 0),
+  stock       int  not null default 0 check (stock >= 0),   -- inventario inicial
+  restock     int  not null default 0 check (restock >= 0), -- resurtido durante el evento
+  codigo      text not null default '',
+  sku         text not null default '',
   active      boolean not null default true,
   sort_order  int  not null default 999,
   sample      boolean not null default false,
@@ -127,11 +130,11 @@ language sql stable security definer set search_path = public as $$
     select (i ->> 'pid')::uuid as pid, sum((i ->> 'qty')::int) as qty
     from public.returns r, jsonb_array_elements(r.items) i group by 1
   )
-  select p.id, p.stock,
+  select p.id, (p.stock + p.restock)::int,
     (coalesce(a.sold_raw, 0) - coalesce(r.qty, 0))::int,
     coalesce(a.held, 0)::int,
-    (p.stock - (coalesce(a.sold_raw, 0) - coalesce(r.qty, 0)) - coalesce(a.held, 0))::int,
-    (p.stock - (coalesce(a.sold_raw, 0) - coalesce(r.qty, 0)))::int
+    (p.stock + p.restock - (coalesce(a.sold_raw, 0) - coalesce(r.qty, 0)) - coalesce(a.held, 0))::int,
+    (p.stock + p.restock - (coalesce(a.sold_raw, 0) - coalesce(r.qty, 0)))::int
   from public.products p
   left join agg a on a.pid = p.id
   left join ret r on r.pid = p.id;
