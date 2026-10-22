@@ -410,7 +410,7 @@ async function saveItems(o, next, okMsg, addedPid){
 $('cajaDetail').onclick=async e=>{
   const sm=e.target.closest('[data-sms]');
   if(sm){ sm.disabled=true; const r=await sendSms(sm.dataset.sms,true); sm.disabled=false;
-    toast(r.ok?'SMS enviado':r.error==='sms_no_configurado'?'El SMS no está configurado (faltan las claves de Twilio en Vercel).':r.error==='limite_sms'?'Ya se enviaron 5 SMS para este pedido.':`No se pudo enviar el SMS${r.detail?': '+r.detail:''}`);
+    toast(r.ok?'SMS enviado':r.error==='sms_no_configurado'?`El SMS no está configurado. Falta en Vercel: ${(r.missing||[]).join(', ')||'(claves)'}`:r.error==='limite_sms'?'Ya se enviaron 5 SMS para este pedido.':`No se pudo enviar el SMS${r.detail?': '+r.detail:''}`);
     queue('orders'); return; }
   const rb=e.target.closest('[data-rq]');
   if(rb){ const pid=rb.dataset.rq, cur=S.retQty[pid]||0, d=+rb.dataset.rd;

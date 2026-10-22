@@ -15,7 +15,8 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'method' });
   const { TWILIO_ACCOUNT_SID: sid, TWILIO_AUTH_TOKEN: tok, TWILIO_FROM: from,
           SUPABASE_URL: sbUrl, SUPABASE_SECRET_KEY: sbKey } = process.env;
-  if (!sid || !tok || !from || !sbUrl || !sbKey) return res.status(501).json({ ok: false, error: 'sms_no_configurado' });
+  const missing = ['TWILIO_ACCOUNT_SID','TWILIO_AUTH_TOKEN','TWILIO_FROM','SUPABASE_URL','SUPABASE_SECRET_KEY'].filter(k => !process.env[k]);
+  if (missing.length) return res.status(501).json({ ok: false, error: 'sms_no_configurado', missing });
 
   const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
   const number = String(body.number || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
