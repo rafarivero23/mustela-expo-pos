@@ -627,3 +627,6 @@ revoke execute on function public.is_admin() from public, anon;
 grant  execute on function public.is_admin() to authenticated;
 revoke execute on function public.reset_event_data(text, boolean) from public, anon;
 grant  execute on function public.reset_event_data(text, boolean) to authenticated;
+
+-- Staff management function (api/staff.js)
+grant select, insert, update, delete on public.staff to service_role;

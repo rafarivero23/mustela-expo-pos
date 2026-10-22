@@ -11,9 +11,9 @@ const ago = iso => { if(!iso) return ''; const m = Math.floor((Date.now()-new Da
 const digits = s => String(s||'').replace(/\D/g,'');
 const okMail = s => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s);
 
-const VIEWS = ['inicio','login','tienda','comunidad','caja','surtido','inventario','corte'];
+const VIEWS = ['inicio','login','tienda','comunidad','caja','surtido','inventario','corte','personal'];
 const KIOSK = ['tienda','comunidad'];
-const STAFF = ['caja','surtido','inventario','corte'];
+const STAFF = ['caja','surtido','inventario','corte','personal'];
 const SOLD = ['pagado','listo','entregado'];
 
 const S = {
@@ -23,7 +23,7 @@ const S = {
   cart:{}, cat:'Todos', step:'shop', busy:false,
   // staff
   session:null, isStaff:false, staffLoaded:false,
-  products:[], orders:[], members:[], returns:[], resets:[], retIdx:{}, retQty:{}, retMode:false, retMethod:null, avail:{}, cfg:{evento:'Expo', kiosk_pin:'2026', privacy_url:'', hold_minutes:30},
+  products:[], orders:[], members:[], returns:[], resets:[], staff:[], pwFor:null, pwDraft:'', rmArm:null, retIdx:{}, retQty:{}, retMode:false, retMethod:null, avail:{}, cfg:{evento:'Expo', kiosk_pin:'2026', privacy_url:'', hold_minutes:30},
   sel:null, method:null, cancelArm:false, ticks:{}, invPending:false,
 };
 
@@ -69,6 +69,7 @@ function go(v){
   $('staffLink').hidden = !kiosk;
   document.querySelectorAll('#tabs .tab').forEach(b=>b.setAttribute('aria-current', String(b.dataset.go===v)));
   $('tabs').querySelectorAll('[data-go="caja"],[data-go="surtido"],[data-go="inventario"],[data-go="corte"]').forEach(b=>b.hidden=!S.isStaff);
+  $('tabs').querySelector('[data-go="personal"]').hidden=!S.isAdmin;
   if(v==='tienda'){ resetKiosk(); loadKiosk(); }
   if(v==='comunidad'){ resetCommunity(); loadKiosk(); }
   if(STAFF.includes(v)) startStaff();
@@ -286,6 +287,7 @@ async function load(what){
     if(what==='members'){ const {data,error}=await sb.from('members').select('*').order('created_at',{ascending:false}).limit(5000); if(error) throw error; S.members=data.map(normMember); }
     if(what==='returns'){ const {data,error}=await sb.from('returns').select('*').order('created_at').limit(5000); if(error) throw error; S.returns=data; indexReturns(); }
     if(what==='resets'){ const {data,error}=await sb.from('reset_log').select('*').order('created_at',{ascending:false}).limit(20); if(error) throw error; S.resets=data; }
+    if(what==='staff'){ const {data,error}=await sb.from('staff').select('*').order('email'); if(error) throw error; S.staff=data; }
     if(what==='settings'){ const {data,error}=await sb.from('settings').select('*').eq('id',1).maybeSingle(); if(error) throw error; if(data) S.cfg=data; }
     if(what==='avail'){ const data=await rpc('product_availability'); S.avail=Object.fromEntries(data.map(r=>[r.id,r])); }
     $('dbBanner').hidden=true;
@@ -303,7 +305,7 @@ async function startStaff(){
     .on('postgres_changes',{event:'*',schema:'public',table:'returns'},()=>queue('returns','avail'))
     .on('postgres_changes',{event:'*',schema:'public',table:'reset_log'},()=>queue('resets'))
     .subscribe(st=>{ if(st==='SUBSCRIBED') queue('products','orders','members','settings','returns','avail'); });
-  await Promise.all(['products','orders','members','settings','returns','avail','resets'].map(load));
+  await Promise.all(['products','orders','members','settings','returns','avail','resets','staff'].map(load));
   S.staffLoaded=true; renderAll();
   // Safety net if realtime drops (venue Wi-Fi): full refresh every 30 s; also ages "hace X min".
   staffTick=setInterval(()=>{ if(STAFF.includes(S.view)) queue('orders','avail'); },30000);
@@ -734,6 +736,60 @@ $('expCatalog').onclick=async()=>{ await load('products');
   if(rows.length===1) rows.push(['','87035893','3504105035891','Ejemplo de producto','Bebé','300 ml','389','40','0','sí','1','']);
   save(`mustela-catalogo-${stamp()}.csv`,csv(rows)); };
 
+/* ---------- PERSONAL (admins; Vercel function /api/staff) ---------- */
+async function staffApi(payload){
+  try{
+    const r=await fetch('/api/staff',{ method:'POST', headers:{'Content-Type':'application/json', Authorization:'Bearer '+(S.session?.access_token||'')}, body:JSON.stringify(payload) });
+    const j=await r.json().catch(()=>({})); return { ok:r.ok&&j.ok!==false, ...j };
+  }catch(e){ return { ok:false, error:'red' }; }
+}
+const STAFF_ERR={ solo_admin:'Solo un administrador puede hacer esto.', correo_invalido:'Revisa el correo.', contrasena_corta:'La contraseña debe tener al menos 8 caracteres.',
+  ultimo_admin:'Debe quedar al menos un administrador.', no_a_ti_mismo:'No puedes quitarte a ti mismo.', usuario_no_existe:'Ese usuario no existe en Supabase.',
+  no_configurado:'Falta SUPABASE_SECRET_KEY en Vercel.', red:'Sin conexión.', no_sesion:'Vuelve a iniciar sesión.' };
+const staffErr = r => STAFF_ERR[r.error] || `No se pudo (${r.error||'error'}${r.detail?': '+r.detail:''})`;
+const genPass = () => { const a='abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'; const b=new Uint32Array(10); crypto.getRandomValues(b); return Array.from(b,x=>a[x%a.length]).join(''); };
+function renderPersonal(){
+  $('perNoAdmin').hidden=S.isAdmin; $('perBox').hidden=!S.isAdmin; if(!S.isAdmin) return;
+  if($('perBody').contains(document.activeElement) && document.activeElement.id==='pw-new') return;
+  const me=(S.session?.user?.email||'').toLowerCase();
+  $('perBody').innerHTML=(S.staff||[]).map(u=>`<tr>
+    <td>${esc(u.nombre||'')}</td><td>${esc(u.email)}${u.email===me?' <span class="pill p-paid">tú</span>':''}</td>
+    <td><input type="checkbox" data-padmin="${esc(u.email)}" ${u.admin?'checked':''} aria-label="Administrador"></td>
+    <td>${S.pwFor===u.email
+      ?`<span style="display:inline-flex;gap:6px;flex-wrap:wrap"><input id="pw-new" style="width:170px;min-height:36px" placeholder="Nueva contraseña" value="${esc(S.pwDraft||'')}"><button type="button" class="btn sm primary" data-pwsave="${esc(u.email)}">Guardar</button><button type="button" class="btn sm ghost" data-pwcancel>Cancelar</button></span>`
+      :`<button type="button" class="linkbtn" data-pw="${esc(u.email)}" style="display:inline;margin-right:12px">Cambiar contraseña</button>${u.email!==me?`<button type="button" class="linkbtn rm" data-prm="${esc(u.email)}" style="display:inline">${S.rmArm===u.email?'¿Seguro? Toca otra vez':'Quitar'}</button>`:''}`}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">Sin usuarios</td></tr>';
+}
+$('p-gen').onclick=()=>{ $('p-pass').value=genPass(); };
+$('perForm').onsubmit=async e=>{
+  e.preventDefault();
+  const email=$('p-email').value.trim().toLowerCase(), password=$('p-pass').value, nombre=$('p-nombre').value.trim(), admin=$('p-admin').checked;
+  if(!okMail(email)) return toast('Revisa el correo.'); if(password.length<8) return toast('La contraseña debe tener al menos 8 caracteres.');
+  $('p-go').disabled=true;
+  const r=await staffApi({ action:'create', email, password, nombre, admin });
+  $('p-go').disabled=false;
+  if(!r.ok) return toast(staffErr(r));
+  $('perMsg').innerHTML=`Usuario listo. Comparte estos datos: <b>${esc(email)}</b> · contraseña <b>${esc(password)}</b> · ${esc(location.origin)}`; $('perMsg').hidden=false;
+  $('perForm').reset(); queue('staff');
+};
+$('perBody').addEventListener('change',async e=>{
+  const c=e.target.closest('[data-padmin]'); if(!c) return;
+  c.disabled=true; const r=await staffApi({ action:'set_admin', email:c.dataset.padmin, admin:c.checked }); c.disabled=false;
+  if(!r.ok){ c.checked=!c.checked; toast(staffErr(r)); } else toast(c.checked?'Ahora es administrador':'Ya no es administrador');
+  queue('staff');
+});
+$('perBody').addEventListener('click',async e=>{
+  const pw=e.target.closest('[data-pw]'); if(pw){ S.pwFor=pw.dataset.pw; S.pwDraft=genPass(); S.rmArm=null; renderPersonal(); return; }
+  if(e.target.closest('[data-pwcancel]')){ S.pwFor=null; renderPersonal(); return; }
+  const sv=e.target.closest('[data-pwsave]');
+  if(sv){ const password=$('pw-new').value; sv.disabled=true; const r=await staffApi({ action:'set_password', email:sv.dataset.pwsave, password }); sv.disabled=false;
+    if(!r.ok) return toast(staffErr(r));
+    $('perMsg').innerHTML=`Contraseña actualizada para <b>${esc(sv.dataset.pwsave)}</b>: <b>${esc(password)}</b>`; $('perMsg').hidden=false; S.pwFor=null; renderPersonal(); return; }
+  const rm=e.target.closest('[data-prm]');
+  if(rm){ if(S.rmArm!==rm.dataset.prm){ S.rmArm=rm.dataset.prm; renderPersonal(); return; }
+    S.rmArm=null; const r=await staffApi({ action:'remove', email:rm.dataset.prm });
+    toast(r.ok?'Usuario dado de baja':staffErr(r)); queue('staff'); }
+});
+
 /* ---------- CORTE DE CAJA ---------- */
 const TZ='America/Mexico_City';
 const dayOf = iso => iso ? new Date(iso).toLocaleDateString('en-CA',{timeZone:TZ}) : '';
@@ -830,6 +886,7 @@ function renderAll(){
   if(S.view==='surtido') renderSurtido();
   if(S.view==='inventario') renderInv();
   if(S.view==='corte') renderCorte();
+  if(S.view==='personal') renderPersonal();
 }
 async function boot(){
   if(!sb){ $('dbBanner').textContent='Falta configurar Supabase: edita config.js con la URL y la anon key del proyecto.'; $('dbBanner').hidden=false; }

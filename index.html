@@ -219,6 +219,7 @@ a{color:var(--accent)}
       <button class="tab" data-go="surtido">Surtido</button>
       <button class="tab" data-go="inventario">Inventario</button>
       <button class="tab" data-go="corte">Corte</button>
+      <button class="tab" data-go="personal" hidden>Personal</button>
       <button class="tab" data-go="tienda">Tienda (tablet)</button>
       <button class="tab" data-go="comunidad">Comunidad (tablet)</button>
       <button class="tab" data-go="inicio">Pantallas</button>
@@ -435,6 +436,27 @@ a{color:var(--accent)}
       <div><div class="colh"><h2>Listos para entregar</h2><span class="pill p-ready num" id="cntReady">0</span></div><div id="colReady"></div></div>
     </div>
     <p class="muted" id="cntDone" style="margin-top:12px"></p>
+  </section>
+
+  <!-- PERSONAL (admins) -->
+  <section id="v-personal" hidden>
+    <h1 style="margin-bottom:16px">Personal</h1>
+    <div id="perNoAdmin" class="panel empty" hidden>Solo un administrador puede gestionar al personal.</div>
+    <div id="perBox" style="display:grid;gap:20px">
+      <div class="tscroll"><table style="min-width:640px"><thead><tr><th>Nombre</th><th>Correo</th><th>Admin</th><th>Acciones</th></tr></thead><tbody id="perBody"></tbody></table></div>
+      <form id="perForm" class="panel" style="display:grid;gap:14px" novalidate>
+        <h3>Agregar usuario</h3>
+        <div class="grid2">
+          <label class="f">Nombre<input id="p-nombre" autocomplete="off"></label>
+          <label class="f">Correo<input id="p-email" type="email" inputmode="email" autocomplete="off"></label>
+          <label class="f">Contraseña (mín. 8)<span style="display:flex;gap:8px"><input id="p-pass" autocomplete="off"><button type="button" class="btn sm ghost" id="p-gen">Generar</button></span></label>
+        </div>
+        <label class="check"><input type="checkbox" id="p-admin"><span><b>Administrador</b><br><span class="muted">Puede gestionar personal, borrar ventas de prueba y restaurarlas.</span></span></label>
+        <p id="perMsg" class="banner warn" hidden style="margin:0"></p>
+        <div><button class="btn primary" id="p-go">Crear usuario</button></div>
+      </form>
+      <p class="muted" style="margin:0;font-size:14px">Todos los usuarios pueden usar Caja, Surtido, Inventario y Corte. Si el correo ya existía en Supabase, se le asigna la contraseña nueva.</p>
+    </div>
   </section>
 
   <!-- CORTE -->
