@@ -162,6 +162,15 @@ td input.n{width:90px;text-align:right}
 @media (prefers-reduced-motion:no-preference){.pcard,.orow,.chip,.btn{transition:background .15s,border-color .15s,box-shadow .15s}}
 
 /* v2 additions */
+.ctable td.r,.ctable th.r{text-align:right}
+.ctable tfoot td{font-weight:800;border-top:2px solid var(--line)}
+.ctable{min-width:560px}
+@media print{
+  body{background:#fff}
+  .topbar,.corte-actions,#resetBox,#toast,#staffLink,#dbBanner{display:none!important}
+  .tile,.panel,.tscroll{break-inside:avoid}
+  .wrap{max-width:none;padding:0}
+}
 .addline select{min-height:44px}
 .rethist{display:grid;gap:6px;font-size:14px;border-top:1.5px dashed var(--line);padding-top:10px}
 .pimg{aspect-ratio:4/3;border-radius:12px;background:var(--soft);display:grid;place-items:center;overflow:hidden;margin:-4px -4px 4px}
@@ -209,6 +218,7 @@ a{color:var(--accent)}
       <button class="tab" data-go="caja">Caja</button>
       <button class="tab" data-go="surtido">Surtido</button>
       <button class="tab" data-go="inventario">Inventario</button>
+      <button class="tab" data-go="corte">Corte</button>
       <button class="tab" data-go="tienda">Tienda (tablet)</button>
       <button class="tab" data-go="comunidad">Comunidad (tablet)</button>
       <button class="tab" data-go="inicio">Pantallas</button>
@@ -425,6 +435,27 @@ a{color:var(--accent)}
       <div><div class="colh"><h2>Listos para entregar</h2><span class="pill p-ready num" id="cntReady">0</span></div><div id="colReady"></div></div>
     </div>
     <p class="muted" id="cntDone" style="margin-top:12px"></p>
+  </section>
+
+  <!-- CORTE -->
+  <section id="v-corte" hidden>
+    <div class="colh" style="flex-wrap:wrap;gap:12px">
+      <h1>Corte de <b>caja</b></h1>
+      <div class="corte-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <select id="corteDay" aria-label="Día del corte" style="width:auto;min-width:230px"></select>
+        <button type="button" class="btn ghost sm" id="cortePrint">Imprimir</button>
+        <button type="button" class="btn sm" id="corteCsv">Descargar CSV</button>
+      </div>
+    </div>
+    <p class="muted" id="corteSub" style="margin:4px 0 16px"></p>
+    <div id="corteBody"></div>
+    <div class="panel section" id="resetBox" hidden style="border-color:var(--bad)">
+      <h3 style="color:var(--bad)">Borrar ventas de prueba</h3>
+      <p class="muted" style="margin:0">Borra <b>todos</b> los pedidos y devoluciones (y si quieres, los registros de Comunidad). Se conservan productos, fotos, stock, ajustes y usuarios. Descarga los CSV antes si los necesitas. <b>No se puede deshacer.</b></p>
+      <label class="check"><input type="checkbox" id="resetMembers"><span>También borrar registros de Comunidad</span></label>
+      <label class="f" style="max-width:320px">Escribe BORRAR para confirmar<input id="resetConfirm" autocomplete="off"></label>
+      <div><button type="button" class="btn danger" id="resetGo">Borrar ventas</button></div>
+    </div>
   </section>
 
   <!-- INVENTARIO -->

@@ -11,9 +11,9 @@ const ago = iso => { if(!iso) return ''; const m = Math.floor((Date.now()-new Da
 const digits = s => String(s||'').replace(/\D/g,'');
 const okMail = s => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s);
 
-const VIEWS = ['inicio','login','tienda','comunidad','caja','surtido','inventario'];
+const VIEWS = ['inicio','login','tienda','comunidad','caja','surtido','inventario','corte'];
 const KIOSK = ['tienda','comunidad'];
-const STAFF = ['caja','surtido','inventario'];
+const STAFF = ['caja','surtido','inventario','corte'];
 const SOLD = ['pagado','listo','entregado'];
 
 const S = {
@@ -68,7 +68,7 @@ function go(v){
   $('topbar').hidden = kiosk || v==='login';
   $('staffLink').hidden = !kiosk;
   document.querySelectorAll('#tabs .tab').forEach(b=>b.setAttribute('aria-current', String(b.dataset.go===v)));
-  $('tabs').querySelectorAll('[data-go="caja"],[data-go="surtido"],[data-go="inventario"]').forEach(b=>b.hidden=!S.isStaff);
+  $('tabs').querySelectorAll('[data-go="caja"],[data-go="surtido"],[data-go="inventario"],[data-go="corte"]').forEach(b=>b.hidden=!S.isStaff);
   if(v==='tienda'){ resetKiosk(); loadKiosk(); }
   if(v==='comunidad'){ resetCommunity(); loadKiosk(); }
   if(STAFF.includes(v)) startStaff();
@@ -96,7 +96,9 @@ async function refreshAuth(){
   const { data } = await sb.auth.getSession();
   S.session = data.session;
   S.isStaff = false;
+  S.isAdmin = false;
   if(S.session){ try{ S.isStaff = !!(await rpc('is_staff')); }catch(e){ S.isStaff=false; } }
+  if(S.isStaff){ try{ S.isAdmin = !!(await rpc('is_admin')); }catch(e){ S.isAdmin=false; } }
   $('who').hidden = !S.session;
   $('whoEmail').textContent = S.session?.user?.email || '';
 }
@@ -272,7 +274,7 @@ $('mAgain').onclick=resetCommunity;
 
 /* ============================ STAFF DATA ============================ */
 const normOrder = o => ({ number:o.number, items:o.items||[], total:Number(o.total)||0, customer:o.customer||{}, community:o.community, status:o.status,
-  consejera:o.consejera||'', factura:!!o.factura, smsCount:o.sms_count||0, smsStatus:o.sms_status||'', smsAt:o.sms_at, createdAt:o.created_at, paidAt:o.paid_at, payMethod:o.pay_method, payRef:o.pay_ref, readyAt:o.ready_at, deliveredAt:o.delivered_at, cancelledAt:o.cancelled_at });
+  consejera:o.consejera||'', factura:!!o.factura, smsCount:o.sms_count||0, smsStatus:o.sms_status||'', smsAt:o.sms_at, createdAt:o.created_at, paidAt:o.paid_at, payMethod:o.pay_method, paidBy:o.paid_by||'', payRef:o.pay_ref, readyAt:o.ready_at, deliveredAt:o.delivered_at, cancelledAt:o.cancelled_at });
 const normProduct = p => ({ ...p, price:Number(p.price)||0, order:p.sort_order });
 const normMember = m => ({ ...m, createdAt:m.created_at });
 
@@ -369,7 +371,7 @@ function renderCajaDetail(){
       <div class="total num"><span>Total</span><span>${money(o.total)}</span></div>
       ${refunded?`<div class="line num" style="color:var(--bad);font-weight:700"><span>Reembolsado</span><span>−${money(refunded)}</span></div><div class="line num" style="font-weight:800;font-size:18px"><span>Neto</span><span>${money(o.total-refunded)}</span></div>`:''}
     </div>
-    ${o.status==='cancelado'?`<p class="muted" style="margin:0">Cancelado ${hhmm(o.cancelledAt)}</p>`:o.status!=='pendiente'?`<p class="muted" style="margin:0">Cobrado ${hhmm(o.paidAt)} · ${esc(o.payMethod||'')}${o.payRef?' · Ref. '+esc(o.payRef):''}</p>`:''}
+    ${o.status==='cancelado'?`<p class="muted" style="margin:0">Cancelado ${hhmm(o.cancelledAt)}</p>`:o.status!=='pendiente'?`<p class="muted" style="margin:0">Cobrado ${hhmm(o.paidAt)} · ${esc(o.payMethod||'')}${o.payRef?' · Ref. '+esc(o.payRef):''}${o.paidBy?' · '+esc(o.paidBy):''}</p>`:''}
     ${ri.list.length?`<div class="rethist"><b>Devoluciones</b>${ri.list.map(r=>`<div>${hhmm(r.created_at)} · ${(r.items||[]).map(i=>`${i.qty}× ${esc(i.name)}`).join(', ')} · <b>${money(r.amount)}</b> por ${esc(r.method)}${r.reason?` · “${esc(r.reason)}”`:''}${r.created_by?` <span class="muted">(${esc(r.created_by)})</span>`:''}</div>`).join('')}</div>`:''}`;
   updateChange(); updateRet();
 }
@@ -700,6 +702,77 @@ $('expCatalog').onclick=async()=>{ await load('products');
   if(rows.length===1) rows.push(['','Ejemplo de producto','Bebé','300 ml','389','40','sí','1','']);
   save(`mustela-catalogo-${stamp()}.csv`,csv(rows)); };
 
+/* ---------- CORTE DE CAJA ---------- */
+const TZ='America/Mexico_City';
+const dayOf = iso => iso ? new Date(iso).toLocaleDateString('en-CA',{timeZone:TZ}) : '';
+const dayLabel = d => d==='all' ? 'Todo el evento' : new Date(d+'T12:00:00').toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+const METHODS=['Tarjeta','Efectivo','Transferencia'];
+function corteData(){
+  const inDay = iso => S.corteDay==='all' || dayOf(iso)===S.corteDay;
+  const pays = S.orders.filter(o=>SOLD.includes(o.status) && inDay(o.paidAt)).sort((a,b)=>String(a.paidAt).localeCompare(String(b.paidAt)));
+  const rets = S.returns.filter(r=>inDay(r.created_at)).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)));
+  const by = METHODS.map(m=>{ const p=pays.filter(o=>o.payMethod===m), r=rets.filter(x=>x.method===m);
+    const v=p.reduce((a,o)=>a+(o.total||0),0), d=r.reduce((a,x)=>a+(Number(x.amount)||0),0);
+    return { m, vn:p.length, v, dn:r.length, d, net:v-d }; });
+  const tot = by.reduce((a,x)=>({vn:a.vn+x.vn,v:a.v+x.v,dn:a.dn+x.dn,d:a.d+x.d,net:a.net+x.net}),{vn:0,v:0,dn:0,d:0,net:0});
+  const units = pays.reduce((a,o)=>a+(o.items||[]).reduce((b,i)=>b+i.qty,0),0) - rets.reduce((a,r)=>a+(r.items||[]).reduce((b,i)=>b+(i.qty||0),0),0);
+  const group = key => { const g={}; for(const o of pays){ const k=key(o)||'—'; const x=g[k]||(g[k]={n:0,t:0}); x.n++; x.t+=o.total||0; } return Object.entries(g).sort((a,b)=>b[1].t-a[1].t); };
+  return { pays, rets, by, tot, units, cajeros:group(o=>o.paidBy), conse:group(o=>o.consejera), pend:S.orders.filter(o=>o.status==='pendiente').length };
+}
+function renderCorte(){
+  const days=[...new Set([...S.orders.filter(o=>o.paidAt).map(o=>dayOf(o.paidAt)), ...S.returns.map(r=>dayOf(r.created_at))])].filter(Boolean).sort().reverse();
+  const today=dayOf(new Date().toISOString());
+  if(!S.corteDay || (S.corteDay!=='all' && !days.includes(S.corteDay) && S.corteDay!==today)) S.corteDay = days.includes(today)||!days.length ? today : days[0];
+  const opts=[...new Set([today,...days])].sort().reverse();
+  $('corteDay').innerHTML = opts.map(d=>`<option value="${d}"${d===S.corteDay?' selected':''}>${dayLabel(d)}${d===today?' (hoy)':''}</option>`).join('') + `<option value="all"${S.corteDay==='all'?' selected':''}>Todo el evento</option>`;
+  const c=corteData();
+  $('corteSub').textContent = `${dayLabel(S.corteDay)} · hora de Ciudad de México · generado ${new Date().toLocaleString('es-MX',{timeZone:TZ,dateStyle:'short',timeStyle:'short'})}`;
+  const efe=c.by.find(x=>x.m==='Efectivo');
+  const tbl=(head,rows,foot)=>`<div class="tscroll"><table class="ctable"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody>${foot?`<tfoot><tr>${foot}</tr></tfoot>`:''}</table></div>`;
+  $('corteBody').innerHTML = `
+    <div class="tiles">${[['Ventas cobradas',money(c.tot.v)],['Devoluciones',c.tot.d?'−'+money(c.tot.d):money(0)],['Neto',money(c.tot.net)],['Pedidos cobrados',c.tot.vn],['Ticket promedio',money(c.tot.vn?c.tot.v/c.tot.vn:0)],['Piezas netas',c.units]].map(([k,v])=>`<div class="tile"><span class="eyebrow">${k}</span><b class="num">${v}</b></div>`).join('')}</div>
+    <div class="panel" style="display:grid;gap:12px;margin-bottom:20px">
+      <h2>Por forma de <b>pago</b></h2>
+      ${tbl('<th>Forma de pago</th><th class="r">Cobros</th><th class="r">Ventas</th><th class="r">Devol.</th><th class="r">Reembolsos</th><th class="r">Neto</th>',
+        c.by.map(x=>`<tr><td>${x.m}</td><td class="r num">${x.vn}</td><td class="r num">${money(x.v)}</td><td class="r num">${x.dn}</td><td class="r num">${x.d?'−'+money(x.d):money(0)}</td><td class="r num"><b>${money(x.net)}</b></td></tr>`).join(''),
+        `<td>Total</td><td class="r num">${c.tot.vn}</td><td class="r num">${money(c.tot.v)}</td><td class="r num">${c.tot.dn}</td><td class="r num">${c.tot.d?'−'+money(c.tot.d):money(0)}</td><td class="r num">${money(c.tot.net)}</td>`)}
+      <p class="banner warn" style="margin:0">Efectivo que debe haber en caja (sin fondo inicial): <b class="num">${money(efe.net)}</b></p>
+      ${c.pend?`<p class="muted" style="margin:0">Hay ${c.pend} pedido${c.pend>1?'s':''} sin cobrar (no cuentan en el corte).</p>`:''}
+    </div>
+    <div class="cols" style="margin-bottom:20px">
+      <div class="panel" style="display:grid;gap:10px"><h3>Por cajero</h3>${tbl('<th>Cobró</th><th class="r">Cobros</th><th class="r">Ventas</th>', c.cajeros.length?c.cajeros.map(([k,x])=>`<tr><td>${esc(k)}</td><td class="r num">${x.n}</td><td class="r num">${money(x.t)}</td></tr>`).join(''):'<tr><td colspan="3" class="empty">Sin cobros</td></tr>')}</div>
+      <div class="panel" style="display:grid;gap:10px"><h3>Por Dermo-Consejera</h3>${tbl('<th>Consejera</th><th class="r">Pedidos</th><th class="r">Ventas</th>', c.conse.length?c.conse.map(([k,x])=>`<tr><td>${esc(k==='—'?'Sin consejera':k)}</td><td class="r num">${x.n}</td><td class="r num">${money(x.t)}</td></tr>`).join(''):'<tr><td colspan="3" class="empty">Sin cobros</td></tr>')}</div>
+    </div>
+    <div class="panel" style="display:grid;gap:10px;margin-bottom:20px"><h3>Cobros (${c.pays.length})</h3>
+      ${tbl('<th>Hora</th><th>Pedido</th><th>Cliente</th><th>Forma</th><th>Ref.</th><th>Cobró</th><th class="r">Total</th>', c.pays.length?c.pays.map(o=>`<tr><td class="num">${S.corteDay==='all'?dayOf(o.paidAt)+' ':''}${hhmm(o.paidAt)}</td><td><b>${esc(o.number)}</b>${o.factura?' <span class="pill p-pend">Factura</span>':''}</td><td>${esc(fullName(o.customer))}</td><td>${esc(o.payMethod||'')}</td><td>${esc(o.payRef||'')}</td><td>${esc(o.paidBy||'')}</td><td class="r num">${money(o.total)}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Sin cobros este día</td></tr>')}
+    </div>
+    <div class="panel" style="display:grid;gap:10px"><h3>Devoluciones (${c.rets.length})</h3>
+      ${tbl('<th>Hora</th><th>Pedido</th><th>Productos</th><th>Forma</th><th>Motivo</th><th>Registró</th><th class="r">Reembolso</th>', c.rets.length?c.rets.map(r=>`<tr><td class="num">${S.corteDay==='all'?dayOf(r.created_at)+' ':''}${hhmm(r.created_at)}</td><td><b>${esc(r.order_number)}</b></td><td>${(r.items||[]).map(i=>`${i.qty}× ${esc(i.name)}`).join(', ')}</td><td>${esc(r.method)}</td><td>${esc(r.reason||'')}</td><td>${esc(r.created_by||'')}</td><td class="r num">−${money(r.amount)}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Sin devoluciones este día</td></tr>')}
+    </div>`;
+  $('resetBox').hidden=!S.isAdmin;
+}
+$('corteDay').onchange=e=>{ S.corteDay=e.target.value; renderCorte(); };
+$('cortePrint').onclick=()=>window.print();
+$('corteCsv').onclick=async()=>{ await Promise.all([load('orders'),load('returns')]); const c=corteData();
+  const rows=[['Corte de caja',dayLabel(S.corteDay)],['Generado',new Date().toLocaleString('es-MX',{timeZone:TZ})],[],
+    ['Forma de pago','Cobros','Ventas','Devoluciones','Reembolsos','Neto'], ...c.by.map(x=>[x.m,x.vn,x.v,x.dn,x.d,x.net]), ['Total',c.tot.vn,c.tot.v,c.tot.dn,c.tot.d,c.tot.net],
+    ['Efectivo esperado en caja (sin fondo inicial)','','','','',c.by.find(x=>x.m==='Efectivo').net],[],
+    ['Cobros'],['Fecha','Hora','Pedido','Nombre','Apellido','Forma de pago','Referencia','Cobró','Dermo-Consejera','Factura','Total'],
+    ...c.pays.map(o=>[dayOf(o.paidAt),hhmm(o.paidAt),o.number,o.customer?.nombre,o.customer?.apellido,o.payMethod,o.payRef,o.paidBy,o.consejera,o.factura?'Sí':'No',o.total]),[],
+    ['Devoluciones'],['Fecha','Hora','Pedido','Productos','Forma de reembolso','Motivo','Registró','Reembolso'],
+    ...c.rets.map(r=>[dayOf(r.created_at),hhmm(r.created_at),r.order_number,(r.items||[]).map(i=>`${i.qty}x ${i.name}`).join('; '),r.method,r.reason,r.created_by,r.amount])];
+  save(`mustela-corte-${S.corteDay}.csv`,csv(rows)); };
+$('resetGo').onclick=async()=>{
+  if($('resetConfirm').value.trim()!=='BORRAR') return toast('Escribe BORRAR para confirmar');
+  $('resetGo').disabled=true;
+  try{ const r=await rpc('reset_event_data',{ p_confirm:'BORRAR', p_members:$('resetMembers').checked });
+    toast(`Listo: se borraron ${r.orders} pedidos, ${r.returns} devoluciones${r.members?` y ${r.members} registros de Comunidad`:''}.`);
+    $('resetConfirm').value=''; $('resetMembers').checked=false; S.sel=null; S.ticks={};
+    queue('orders','returns','members','avail');
+  }catch(ex){ toast(/solo_admin/.test(ex?.message)?'Solo un administrador puede borrar ventas.':errMsg(ex)); }
+  finally{ $('resetGo').disabled=false; }
+};
+
 /* ---------- brand ---------- */
 // Website palette per product line (Play Book › Website colors)
 const LINE_COLORS = { 'bebé':'#E1F3FA', 'bebe':'#E1F3FA', 'piel atópica':'#D2F0EF', 'piel atopica':'#D2F0EF', 'maternidad':'#EFCCD7',
@@ -714,6 +787,7 @@ function renderAll(){
   if(S.view==='caja') renderCaja();
   if(S.view==='surtido') renderSurtido();
   if(S.view==='inventario') renderInv();
+  if(S.view==='corte') renderCorte();
 }
 async function boot(){
   if(!sb){ $('dbBanner').textContent='Falta configurar Supabase: edita config.js con la URL y la anon key del proyecto.'; $('dbBanner').hidden=false; }

@@ -8,6 +8,7 @@
 create table if not exists public.staff (
   email      text primary key check (email = lower(email)),
   nombre     text,
+  admin      boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -53,7 +54,8 @@ create table if not exists public.orders (
   factura       boolean not null default false,
   sms_count     int not null default 0,
   sms_status    text not null default '',
-  sms_at        timestamptz
+  sms_at        timestamptz,
+  paid_by       text not null default ''
 );
 create index if not exists orders_status_idx on public.orders (status);
 
@@ -303,7 +305,8 @@ begin
   end loop;
 
   update public.orders
-     set status = 'pagado', paid_at = now(), pay_method = p_method, pay_ref = left(coalesce(p_ref, ''), 120)
+     set status = 'pagado', paid_at = now(), pay_method = p_method, pay_ref = left(coalesce(p_ref, ''), 120),
+         paid_by = lower(coalesce(auth.jwt() ->> 'email', ''))
    where number = p_number;
   return true;
 end;
@@ -525,3 +528,35 @@ begin
 end $$;
 
 -- Product images (storage bucket + staff-only upload): see 002_product_images.sql
+
+-- SMS function (service_role)
+grant usage on schema public to service_role;
+grant select, update on public.orders to service_role;
+grant select on public.staff to service_role;
+
+-- ---------- Admin: end-of-test reset ---------------------------------
+create or replace function public.is_admin() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.staff
+                 where email = lower(coalesce(auth.jwt() ->> 'email', '')) and admin);
+$$;
+
+-- Deletes all orders + returns (and optionally Comunidad sign-ups). Products,
+-- stock, photos, settings and staff are kept. Requires p_confirm = 'BORRAR'.
+create or replace function public.reset_event_data(p_confirm text, p_members boolean default false)
+returns jsonb
+language plpgsql volatile security definer set search_path = public as $$
+declare v_o int; v_r int; v_m int := 0;
+begin
+  if not public.is_admin() then raise exception 'solo_admin'; end if;
+  if p_confirm is distinct from 'BORRAR' then raise exception 'confirmacion_invalida'; end if;
+  delete from public.returns where true; get diagnostics v_r = row_count;
+  delete from public.orders where true;  get diagnostics v_o = row_count;
+  if coalesce(p_members, false) then delete from public.members where true; get diagnostics v_m = row_count; end if;
+  return jsonb_build_object('orders', v_o, 'returns', v_r, 'members', v_m);
+end;
+$$;
+revoke execute on function public.is_admin() from public, anon;
+grant  execute on function public.is_admin() to authenticated;
+revoke execute on function public.reset_event_data(text, boolean) from public, anon;
+grant  execute on function public.reset_event_data(text, boolean) to authenticated;
