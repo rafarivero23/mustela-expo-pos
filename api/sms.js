@@ -12,6 +12,11 @@ const MAX_SENDS = 5;           // total per order (first + staff resends)
 const money = n => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(n) || 0);
 
 export default async function handler(req, res) {
+  try { return await run(req, res); }
+  catch (e) { return res.status(500).json({ ok: false, error: 'excepcion', detail: String(e?.message || e).slice(0, 160) }); }
+}
+
+async function run(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'method' });
   const { TWILIO_ACCOUNT_SID: sid, TWILIO_AUTH_TOKEN: tok, TWILIO_FROM: from,
           SUPABASE_URL: sbUrl, SUPABASE_SECRET_KEY: sbKey } = process.env;
@@ -38,7 +43,12 @@ export default async function handler(req, res) {
   }
 
   const r = await db(`orders?select=number,total,status,created_at,customer,sms_count&number=eq.${encodeURIComponent(number)}`);
-  const o = r.ok ? (await r.json())[0] : null;
+  if (!r.ok) {
+    const t = await r.text();
+    const hint = /sms_count/.test(t) ? 'falta_sql_005' : (r.status === 401 || r.status === 403) ? 'clave_supabase_invalida' : 'error_db';
+    return res.status(500).json({ ok: false, error: hint, detail: t.slice(0, 160) });
+  }
+  const o = (await r.json())[0];
   if (!o) return res.status(404).json({ ok: false, error: 'pedido_no_existe' });
   if ((o.sms_count || 0) >= MAX_SENDS) return res.status(429).json({ ok: false, error: 'limite_sms' });
   if (!isStaff) {
