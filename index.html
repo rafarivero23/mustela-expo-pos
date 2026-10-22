@@ -451,10 +451,11 @@ a{color:var(--accent)}
     <div id="corteBody"></div>
     <div class="panel section" id="resetBox" hidden style="border-color:var(--bad)">
       <h3 style="color:var(--bad)">Borrar ventas de prueba</h3>
-      <p class="muted" style="margin:0">Borra <b>todos</b> los pedidos y devoluciones (y si quieres, los registros de Comunidad). Se conservan productos, fotos, stock, ajustes y usuarios. Descarga los CSV antes si los necesitas. <b>No se puede deshacer.</b></p>
+      <p class="muted" style="margin:0">Borra <b>todos</b> los pedidos y devoluciones (y si quieres, los registros de Comunidad). Se conservan productos, fotos, stock, ajustes y usuarios. Antes de borrar se guarda una copia: si fue un error, usa <b>Restaurar</b> abajo.</p>
       <label class="check"><input type="checkbox" id="resetMembers"><span>También borrar registros de Comunidad</span></label>
       <label class="f" style="max-width:320px">Escribe BORRAR para confirmar<input id="resetConfirm" autocomplete="off"></label>
       <div><button type="button" class="btn danger" id="resetGo">Borrar ventas</button></div>
+      <div id="resetHist" style="display:grid;gap:8px"></div>
     </div>
   </section>
 

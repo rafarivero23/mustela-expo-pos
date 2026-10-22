@@ -23,7 +23,7 @@ const S = {
   cart:{}, cat:'Todos', step:'shop', busy:false,
   // staff
   session:null, isStaff:false, staffLoaded:false,
-  products:[], orders:[], members:[], returns:[], retIdx:{}, retQty:{}, retMode:false, retMethod:null, avail:{}, cfg:{evento:'Expo', kiosk_pin:'2026', privacy_url:'', hold_minutes:30},
+  products:[], orders:[], members:[], returns:[], resets:[], retIdx:{}, retQty:{}, retMode:false, retMethod:null, avail:{}, cfg:{evento:'Expo', kiosk_pin:'2026', privacy_url:'', hold_minutes:30},
   sel:null, method:null, cancelArm:false, ticks:{}, invPending:false,
 };
 
@@ -285,6 +285,7 @@ async function load(what){
     if(what==='orders'){ const {data,error}=await sb.from('orders').select('*').order('created_at',{ascending:false}).limit(2000); if(error) throw error; S.orders=data.map(normOrder); }
     if(what==='members'){ const {data,error}=await sb.from('members').select('*').order('created_at',{ascending:false}).limit(5000); if(error) throw error; S.members=data.map(normMember); }
     if(what==='returns'){ const {data,error}=await sb.from('returns').select('*').order('created_at').limit(5000); if(error) throw error; S.returns=data; indexReturns(); }
+    if(what==='resets'){ const {data,error}=await sb.from('reset_log').select('*').order('created_at',{ascending:false}).limit(20); if(error) throw error; S.resets=data; }
     if(what==='settings'){ const {data,error}=await sb.from('settings').select('*').eq('id',1).maybeSingle(); if(error) throw error; if(data) S.cfg=data; }
     if(what==='avail'){ const data=await rpc('product_availability'); S.avail=Object.fromEntries(data.map(r=>[r.id,r])); }
     $('dbBanner').hidden=true;
@@ -300,8 +301,9 @@ async function startStaff(){
     .on('postgres_changes',{event:'*',schema:'public',table:'members'},()=>queue('members'))
     .on('postgres_changes',{event:'*',schema:'public',table:'settings'},()=>queue('settings'))
     .on('postgres_changes',{event:'*',schema:'public',table:'returns'},()=>queue('returns','avail'))
+    .on('postgres_changes',{event:'*',schema:'public',table:'reset_log'},()=>queue('resets'))
     .subscribe(st=>{ if(st==='SUBSCRIBED') queue('products','orders','members','settings','returns','avail'); });
-  await Promise.all(['products','orders','members','settings','returns','avail'].map(load));
+  await Promise.all(['products','orders','members','settings','returns','avail','resets'].map(load));
   S.staffLoaded=true; renderAll();
   // Safety net if realtime drops (venue Wi-Fi): full refresh every 30 s; also ages "hace X min".
   staffTick=setInterval(()=>{ if(STAFF.includes(S.view)) queue('orders','avail'); },30000);
@@ -750,6 +752,8 @@ function renderCorte(){
       ${tbl('<th>Hora</th><th>Pedido</th><th>Productos</th><th>Forma</th><th>Motivo</th><th>Registró</th><th class="r">Reembolso</th>', c.rets.length?c.rets.map(r=>`<tr><td class="num">${S.corteDay==='all'?dayOf(r.created_at)+' ':''}${hhmm(r.created_at)}</td><td><b>${esc(r.order_number)}</b></td><td>${(r.items||[]).map(i=>`${i.qty}× ${esc(i.name)}`).join(', ')}</td><td>${esc(r.method)}</td><td>${esc(r.reason||'')}</td><td>${esc(r.created_by||'')}</td><td class="r num">−${money(r.amount)}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Sin devoluciones este día</td></tr>')}
     </div>`;
   $('resetBox').hidden=!S.isAdmin;
+  const rs=S.resets||[], firstOpen=rs.find(r=>!r.restored_at);
+  $('resetHist').innerHTML = rs.length ? '<b>Historial de borrados</b>' + rs.map(r=>`<div class="line" style="font-size:14px"><span>${new Date(r.created_at).toLocaleString('es-MX',{timeZone:TZ,dateStyle:'short',timeStyle:'short'})} · ${esc(r.created_by)} · ${r.orders} pedidos, ${r.returns} devoluciones${r.members?`, ${r.members} registros`:''}${r.restored_at?` · <span class="pill p-ready">Restaurado</span>`:''}</span>${r===firstOpen?`<button type="button" class="btn sm ghost" data-restore="${r.id}">Restaurar</button>`:''}</div>`).join('') : '';
 }
 $('corteDay').onchange=e=>{ S.corteDay=e.target.value; renderCorte(); };
 $('cortePrint').onclick=()=>window.print();
@@ -762,13 +766,21 @@ $('corteCsv').onclick=async()=>{ await Promise.all([load('orders'),load('returns
     ['Devoluciones'],['Fecha','Hora','Pedido','Productos','Forma de reembolso','Motivo','Registró','Reembolso'],
     ...c.rets.map(r=>[dayOf(r.created_at),hhmm(r.created_at),r.order_number,(r.items||[]).map(i=>`${i.qty}x ${i.name}`).join('; '),r.method,r.reason,r.created_by,r.amount])];
   save(`mustela-corte-${S.corteDay}.csv`,csv(rows)); };
+$('resetHist').onclick=async e=>{
+  const b=e.target.closest('[data-restore]'); if(!b) return;
+  b.disabled=true;
+  try{ const r=await rpc('restore_reset',{ p_id:b.dataset.restore });
+    toast(`Restaurado: ${r.orders} pedidos, ${r.returns} devoluciones${r.members?`, ${r.members} registros de Comunidad`:''}.`);
+    queue('orders','returns','members','avail','resets');
+  }catch(ex){ toast(/nada_que_restaurar/.test(ex?.message)?'No hay nada pendiente por restaurar.':/solo_admin/.test(ex?.message)?'Solo un administrador puede restaurar.':errMsg(ex)); b.disabled=false; }
+};
 $('resetGo').onclick=async()=>{
   if($('resetConfirm').value.trim()!=='BORRAR') return toast('Escribe BORRAR para confirmar');
   $('resetGo').disabled=true;
   try{ const r=await rpc('reset_event_data',{ p_confirm:'BORRAR', p_members:$('resetMembers').checked });
     toast(`Listo: se borraron ${r.orders} pedidos, ${r.returns} devoluciones${r.members?` y ${r.members} registros de Comunidad`:''}.`);
     $('resetConfirm').value=''; $('resetMembers').checked=false; S.sel=null; S.ticks={};
-    queue('orders','returns','members','avail');
+    queue('orders','returns','members','avail','resets');
   }catch(ex){ toast(/solo_admin/.test(ex?.message)?'Solo un administrador puede borrar ventas.':errMsg(ex)); }
   finally{ $('resetGo').disabled=false; }
 };
