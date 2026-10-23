@@ -156,6 +156,10 @@ td.r,th.r{text-align:right}
 td input{min-height:38px;padding:0 8px;font-size:14px}
 td input.n{width:90px;text-align:right}
 .lowstock{color:var(--bad);font-weight:800}
+.pc-inc{margin:0;font-size:13px;color:var(--muted);line-height:1.35}
+.kitinc{font-size:13px;color:var(--muted);font-weight:400;margin-top:2px}
+tr.editing td{background:var(--soft,#EEF4FB)}
+#kitForm .lines{display:grid;gap:6px}
 .section{display:grid;gap:14px;margin-top:28px}
 .pinpad{position:fixed;inset:0;background:rgba(0,40,90,.45);z-index:60;display:grid;place-items:center;padding:16px}
 .pinbox{background:var(--surface);border-radius:18px;padding:24px;width:min(360px,100%);display:grid;gap:14px}
@@ -500,6 +504,23 @@ a{color:var(--accent)}
     <div class="tiles" id="tiles"></div>
     <div class="colh"><h2>Productos</h2><span class="muted" style="font-size:14px">Disponible = inv. inicial + resurtido − vendido − apartado en pedidos sin cobrar</span></div>
     <div class="tscroll" id="invWrap"><table><thead><tr><th>Foto</th><th>Producto</th><th>Código</th><th>SKU</th><th>Línea</th><th>Tamaño</th><th class="r">Precio</th><th class="r">Inv. inicial</th><th class="r">Resurtido</th><th class="r">Vendido</th><th class="r">Apartado</th><th class="r">Disponible</th><th>Visible</th></tr></thead><tbody id="invBody"></tbody></table></div>
+
+    <div class="section" id="kitBox">
+      <div class="colh"><h2>Kits</h2><span class="muted" style="font-size:14px">Al vender un kit se descuentan del inventario los productos que lo forman. Disponible = cuántos kits alcanzan con el inventario actual.</span></div>
+      <div class="tscroll" id="kitWrap"><table><thead><tr><th>Foto</th><th>Kit</th><th>Contenido</th><th class="r">Precio</th><th class="r">Vendidos</th><th class="r">Apartados</th><th class="r">Disponibles</th><th>Visible</th><th></th></tr></thead><tbody id="kitBody"></tbody></table></div>
+      <form id="kitForm" class="panel" novalidate style="display:grid;gap:12px;margin-top:12px">
+        <h3 id="kitTitle">Nuevo kit</h3>
+        <div class="grid2">
+          <label class="f">Nombre del kit<input id="k-name" autocomplete="off" placeholder="Kit Bienvenida"></label>
+          <label class="f">Precio final del kit (MXN)<input id="k-price" inputmode="decimal" autocomplete="off"></label>
+          <label class="f">Descripción corta (opcional)<input id="k-size" autocomplete="off" placeholder="4 piezas"></label>
+        </div>
+        <div class="lines" id="k-items"></div>
+        <div class="addline"><select id="k-add" aria-label="Agregar producto al kit"></select></div>
+        <p class="muted" id="k-sum" style="margin:0;font-size:14px"></p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn primary" id="k-save">Crear kit</button><button type="button" class="btn ghost" id="k-cancel" hidden>Cancelar edición</button></div>
+      </form>
+    </div>
 
     <div class="panel section" id="importBox">
       <h3>Importar catálogo desde CSV</h3>

@@ -49,7 +49,7 @@ function errMsg(e){
     producto_no_disponible:'Un producto ya no está disponible. Revisa tu pedido.', cantidad_invalida:'Revisa las cantidades del pedido.',
     no_autorizado:'Tu usuario no tiene acceso de personal.', sin_permiso:'Tu usuario no tiene permiso para esta acción.', 'row-level security':'Tu usuario no tiene permiso para esta acción.', pedido_no_existe:'Ese pedido no existe.',
     pedido_ya_procesado:'Ese pedido ya fue procesado en otro dispositivo.', cambio_invalido:'Ese pedido cambió en otro dispositivo. Revisa la lista.',
-    metodo_invalido:'Elige la forma de pago.', pedido_no_cobrado:'Solo se pueden devolver pedidos cobrados.', producto_no_en_pedido:'Ese producto no está en el pedido.', devolucion_vacia:'Marca al menos una pieza para devolver.', sin_numeros:'No se pudo generar el número. Intenta de nuevo.',
+    metodo_invalido:'Elige la forma de pago.', pedido_no_cobrado:'Solo se pueden devolver pedidos cobrados.', producto_no_en_pedido:'Ese producto no está en el pedido.', devolucion_vacia:'Marca al menos una pieza para devolver.', kit_sin_nombre:'Escribe el nombre del kit.', kit_precio:'Escribe el precio final del kit.', kit_sin_productos:'Agrega al menos un producto al kit.', kit_producto_invalido:'Un producto del kit no es válido (no se puede meter un kit dentro de otro).', kit_no_existe:'Ese kit ya no existe.', kit_con_ventas:'Este kit ya tiene ventas y no se puede eliminar. Desmarca “Visible” para ocultarlo de la tienda.', sin_numeros:'No se pudo generar el número. Intenta de nuevo.',
   };
   for (const k in map) if (m.includes(k)) return map[k];
   if (e?.code==='PGRST202' || /Could not find the function|does not exist|schema cache/i.test(m)) return 'Falta correr la actualización de la base de datos (SQL) en Supabase. Avisa al administrador.';
@@ -156,7 +156,10 @@ function bumpIdle(){ clearTimeout(idleT); if(S.view!=='tienda'||S.step==='done')
 ['pointerdown','keydown'].forEach(ev=>document.addEventListener(ev,bumpIdle,true));
 
 const catById = id => S.catalog.find(p=>p.id===id);
-const cartItems = () => Object.entries(S.cart).filter(([,q])=>q>0).map(([pid,qty])=>{const p=catById(pid);return p?{pid,name:p.name,size:p.size||'',price:p.price,qty}:null}).filter(Boolean);
+// Kit contents, e.g. "2× Crema 300 ml, 1× Gel" (mult = kits in the line)
+const compsTxt = (comps, mult=1) => (comps||[]).map(c=>`${(c.qty||1)*mult}× ${c.name}${c.size?' '+c.size:''}`).join(', ');
+const kitInc = (comps, mult=1) => comps?.length ? `<div class="kitinc">Incluye: ${esc(compsTxt(comps,mult))}</div>` : '';
+const cartItems = () => Object.entries(S.cart).filter(([,q])=>q>0).map(([pid,qty])=>{const p=catById(pid);return p?{pid,name:p.name,size:p.size||'',price:p.price,qty,comps:p.kit?p.includes:null}:null}).filter(Boolean);
 const cartTotal = () => cartItems().reduce((s,i)=>s+i.price*i.qty,0);
 
 function resetKiosk(){
@@ -180,7 +183,7 @@ function renderKiosk(){
     return `<div class="pcard${q?' in':''}${out?' out':''}">
       ${hasImgs?`<div class="pimg" style="background:${lineColor(p.category)}">${p.image_url?`<img src="${esc(p.image_url)}" alt="" loading="lazy" onerror="this.remove()">`:''}</div>`:''}
       <div class="pc-top">${p.category?`<span class="pc-line" style="background:${lineColor(p.category)}">${esc(p.category)}</span>`:'<span></span>'}<span>${esc(p.size||'')}</span></div>
-      <h3>${esc(p.name)}</h3>
+      <h3>${esc(p.name)}</h3>${p.kit&&p.includes?.length?`<p class="pc-inc">Incluye: ${esc(compsTxt(p.includes))}</p>`:''}
       <div class="pc-bot"><span class="price num">${money(p.price)}</span>
       ${out?'<span class="pill p-cancel">Agotado</span>':
         q? `<div class="stepper"><button data-dec="${p.id}" aria-label="Quitar uno">−</button><span class="num">${q}</span><button class="add" data-inc="${p.id}" ${max?'disabled style="opacity:.4"':''} aria-label="Agregar uno">+</button></div>`
@@ -194,7 +197,7 @@ function renderKiosk(){
   $('cbCount').textContent = `${n} ${n===1?'producto':'productos'}`;
   $('cbTotal').textContent = money(cartTotal());
   if(S.step==='form'){
-    $('sumLines').innerHTML = items.map(i=>`<div class="line"><div class="nm"><b>${i.qty} ×</b> ${esc(i.name)} <span class="muted">${esc(i.size)}</span></div><span class="num">${money(i.price*i.qty)}</span></div>`).join('');
+    $('sumLines').innerHTML = items.map(i=>`<div class="line"><div class="nm"><b>${i.qty} ×</b> ${esc(i.name)} <span class="muted">${esc(i.size)}</span>${kitInc(i.comps)}</div><span class="num">${money(i.price*i.qty)}</span></div>`).join('');
     $('sumTotal').textContent = money(cartTotal());
   }
 }
@@ -294,6 +297,7 @@ async function load(what){
     if(what==='resets'){ const {data,error}=await sb.from('reset_log').select('*').order('created_at',{ascending:false}).limit(20); if(error) throw error; S.resets=data; }
     if(what==='staff'){ const {data,error}=await sb.from('staff').select('*').order('email'); if(error) throw error; S.staff=data; }
     if(what==='settings'){ const {data,error}=await sb.from('settings').select('*').eq('id',1).maybeSingle(); if(error) throw error; if(data) S.cfg=data; }
+    if(what==='kits'){ const {data,error}=await sb.from('kit_items').select('*'); if(error){ S.kitItems={}; return; } const g={}; for(const r of data) (g[r.kit_id]||(g[r.kit_id]=[])).push({pid:r.product_id, qty:r.qty}); S.kitItems=g; }
     if(what==='avail'){ const data=await rpc('product_availability'); S.avail=Object.fromEntries(data.map(r=>[r.id,r])); }
     $('dbBanner').hidden=true;
   }catch(e){ $('dbBanner').hidden=false; }
@@ -305,12 +309,13 @@ async function startStaff(){
   channel = sb.channel('staff')
     .on('postgres_changes',{event:'*',schema:'public',table:'orders'},()=>queue('orders','avail'))
     .on('postgres_changes',{event:'*',schema:'public',table:'products'},()=>queue('products','avail'))
+    .on('postgres_changes',{event:'*',schema:'public',table:'kit_items'},()=>queue('kits','avail'))
     .on('postgres_changes',{event:'*',schema:'public',table:'members'},()=>queue('members'))
     .on('postgres_changes',{event:'*',schema:'public',table:'settings'},()=>queue('settings'))
     .on('postgres_changes',{event:'*',schema:'public',table:'returns'},()=>queue('returns','avail'))
     .on('postgres_changes',{event:'*',schema:'public',table:'reset_log'},()=>queue('resets'))
-    .subscribe(st=>{ if(st==='SUBSCRIBED') queue('products','orders','members','settings','returns','avail'); });
-  await Promise.all(['products','orders','members','settings','returns','avail','resets','staff'].map(load));
+    .subscribe(st=>{ if(st==='SUBSCRIBED') queue('products','kits','orders','members','settings','returns','avail'); });
+  await Promise.all(['products','kits','orders','members','settings','returns','avail','resets','staff'].map(load));
   S.staffLoaded=true; renderAll();
   // Safety net if realtime drops (venue Wi-Fi): full refresh every 30 s; also ages "hace X min".
   staffTick=setInterval(()=>{ if(STAFF.includes(S.view)) queue('orders','avail'); },30000);
@@ -359,14 +364,14 @@ function renderCajaDetail(){
   const editable=o.status==='pendiente';
   const c=o.customer||{};
   const inOrder=Object.fromEntries((o.items||[]).map(i=>[i.pid,i.qty]));
-  const addSel = editable ? `<div class="addline"><select id="addPid" aria-label="Agregar producto"><option value="">+ Agregar producto…</option>${[...S.products].filter(p=>p.active!==false).sort((a,b)=>(a.order??999)-(b.order??999)).map(p=>{ const left=(S.avail[p.id]?.free??0)-(inOrder[p.id]||0); return `<option value="${p.id}"${left<=0?' disabled':''}>${esc(p.name)} ${esc(p.size||'')} · ${money(p.price)}${left<=0?' (sin stock)':''}</option>`; }).join('')}</select></div>` : '';
+  const addSel = editable ? `<div class="addline"><select id="addPid" aria-label="Agregar producto"><option value="">+ Agregar producto…</option>${[...S.products].filter(p=>p.active!==false).sort((a,b)=>(a.order??999)-(b.order??999)).map(p=>{ const left=(S.avail[p.id]?.free??0)-(inOrder[p.id]||0); return `<option value="${p.id}"${left<=0?' disabled':''}>${p.is_kit&&!/^kit/i.test(p.name)?'Kit · ':''}${esc(p.name)} ${esc(p.size||'')} · ${money(p.price)}${left<=0?' (sin stock)':''}</option>`; }).join('')}</select></div>` : '';
   const lineHtml=(i,ix)=>{
     const r=ri.qty[i.pid]||0, left=i.qty-r;
     if(editable){ const short=i.qty>(S.avail[i.pid]?.free??0);
-      return `<div class="line"><div class="nm"><span class="mini-step"><button data-q="${ix}" data-d="-1" aria-label="Quitar">−</button><b class="num" style="min-width:24px;text-align:center">${i.qty}</b><button data-q="${ix}" data-d="1" aria-label="Agregar">+</button></span> ${esc(i.name)} <span class="muted">${esc(i.size||'')}</span>${short?' <span class="pill p-cancel">Sin stock</span>':''}</div><span class="num">${money(i.price*i.qty)}</span></div>`; }
+      return `<div class="line"><div class="nm"><span class="mini-step"><button data-q="${ix}" data-d="-1" aria-label="Quitar">−</button><b class="num" style="min-width:24px;text-align:center">${i.qty}</b><button data-q="${ix}" data-d="1" aria-label="Agregar">+</button></span> ${esc(i.name)} <span class="muted">${esc(i.size||'')}</span>${short?' <span class="pill p-cancel">Sin stock</span>':''}${kitInc(i.comps,i.qty)}</div><span class="num">${money(i.price*i.qty)}</span></div>`; }
     const rq=S.retQty[i.pid]||0;
     const retCtl = S.retMode&&left>0 ? `<span class="mini-step" style="margin-left:8px"><button data-rq="${esc(i.pid)}" data-rd="-1" aria-label="Menos">−</button><b class="num" style="min-width:24px;text-align:center;color:var(--bad)">${rq}</b><button data-rq="${esc(i.pid)}" data-rd="1" data-max="${left}" aria-label="Más">+</button></span>` : '';
-    return `<div class="line"><div class="nm"><b>${i.qty} ×</b> ${esc(i.name)} <span class="muted">${esc(i.size||'')}</span>${r?` <span class="pill p-cancel">${r} devuelto${r>1?'s':''}</span>`:''}${retCtl}</div><span class="num">${money(i.price*i.qty)}</span></div>`;
+    return `<div class="line"><div class="nm"><b>${i.qty} ×</b> ${esc(i.name)} <span class="muted">${esc(i.size||'')}</span>${r?` <span class="pill p-cancel">${r} devuelto${r>1?'s':''}</span>`:''}${retCtl}${kitInc(i.comps,i.qty)}</div><span class="num">${money(i.price*i.qty)}</span></div>`;
   };
   const refunded=ri.amount;
   $('cajaDetail').innerHTML=`
@@ -476,7 +481,7 @@ function renderSurtido(){
   const done=S.orders.filter(o=>o.status==='entregado').length; $('cntDone').textContent= done?`${done} pedidos entregados.`:'';
   const card=(o,mode)=>`<div class="ticket"><div class="th"><span class="c">${esc(o.number)}</span><span class="muted" style="font-size:14px">${mode==='paid'?'Pagado '+ago(o.paidAt):'Listo '+ago(o.readyAt)}</span></div>
     <div><b>${esc(fullName(o.customer))}</b></div>
-    <ul>${(o.items||[]).map((i,ix)=>{const k=o.number+':'+ix; const rq=retInfo(o.number).qty[i.pid]||0, nq=i.qty-rq; if(nq<=0) return ''; return mode==='paid'?`<li><label><input type="checkbox" data-tick="${esc(k)}" ${S.ticks[k]?'checked':''}><span class="q num">${nq}×</span><span>${esc(i.name)} <span class="muted">${esc(i.size||'')}</span></span></label></li>`:`<li><span class="q num">${nq}×</span> ${esc(i.name)} <span class="muted">${esc(i.size||'')}</span></li>`;}).join('')}</ul>
+    <ul>${(o.items||[]).map((i,ix)=>{const k=o.number+':'+ix; const rq=retInfo(o.number).qty[i.pid]||0, nq=i.qty-rq; if(nq<=0) return ''; return mode==='paid'?`<li><label><input type="checkbox" data-tick="${esc(k)}" ${S.ticks[k]?'checked':''}><span class="q num">${nq}×</span><span>${esc(i.name)} <span class="muted">${esc(i.size||'')}</span>${kitInc(i.comps,nq)}</span></label></li>`:`<li><span class="q num">${nq}×</span> ${esc(i.name)} <span class="muted">${esc(i.size||'')}</span>${kitInc(i.comps,nq)}</li>`;}).join('')}</ul>
     ${mode==='paid'?`<button class="btn primary" data-ready="${esc(o.number)}">Listo para entregar</button>`:`<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ok" data-deliver="${esc(o.number)}">Entregado</button><button class="btn ghost sm" data-back="${esc(o.number)}">Regresar a surtir</button></div>`}</div>`;
   $('colPaid').innerHTML=paid.length?paid.map(o=>card(o,'paid')).join(''):'<div class="panel empty">Nada por surtir.</div>';
   $('colReady').innerHTML=ready.length?ready.map(o=>card(o,'ready')).join(''):'<div class="panel empty">Nada pendiente de entrega.</div>';
@@ -498,11 +503,12 @@ function renderInv(){
   $('tiles').innerHTML=[['Ventas cobradas',money(sales)],['Pedidos cobrados',paid.length],['Ticket promedio',money(paid.length?sales/paid.length:0)],['Piezas vendidas',units],['Por cobrar',pend],['Devoluciones',money(refunds)],['Registros Comunidad',S.staffLoaded?S.members.length:'…']]
     .map(([k,v])=>`<div class="tile"><span class="eyebrow">${k}</span><b class="num">${v}</b></div>`).join('');
   $('sampleNote').hidden=!S.products.some(p=>p.sample);
+  renderKits();
   $('catList').innerHTML=[...new Set(S.products.map(p=>p.category).filter(Boolean))].map(c=>`<option value="${esc(c)}">`).join('');
   if($('invWrap').contains(document.activeElement)){ S.invPending=true; }
   else {
     S.invPending=false;
-    const rows=[...S.products].sort((a,b)=>(a.order??999)-(b.order??999)||String(a.name).localeCompare(b.name));
+    const rows=physProducts().sort((a,b)=>(a.order??999)-(b.order??999)||String(a.name).localeCompare(b.name));
     $('invBody').innerHTML=rows.length?rows.map(p=>{const i=S.avail[p.id]||{sold:0,held:0,available:0}; return `<tr>
       <td><div class="thumbcell"><div class="thumb">${p.image_url?`<img src="${esc(p.image_url)}" alt="">`:'<span class="muted" style="font-size:12px">—</span>'}</div>
         <div class="thumbbtns"><label class="linkbtn">${p.image_url?'Cambiar':'Subir'}<input class="vh" type="file" accept="image/*" data-img="${p.id}"></label>${p.image_url?`<button type="button" class="linkbtn rm" data-rmimg="${p.id}">Quitar</button>`:''}</div></div></td>
@@ -559,15 +565,16 @@ async function uploadImage(id, file){
     toast('Foto guardada'); queue('products');
   }catch(ex){ toast('No se pudo subir la foto. Revisa la conexión.'); }
 }
-$('invWrap').addEventListener('click',async e=>{
+const onImgClick=async e=>{
   const b=e.target.closest('[data-rmimg]'); if(!b) return; b.blur();
   const id=b.dataset.rmimg, old=storagePath(S.products.find(p=>p.id===id)?.image_url);
   const { error } = await sb.from('products').update({ image_url:'' }).eq('id',id);
   if(error) return toast(errMsg(error));
   if(old) sb.storage.from(BUCKET).remove([old]);
   toast('Foto quitada'); queue('products');
-});
-$('invWrap').addEventListener('change',async e=>{
+};
+['invWrap','kitWrap'].forEach(id=>$(id).addEventListener('click',onImgClick));
+const onInvChange=async e=>{
   const el=e.target;
   if(el.dataset.img){ const f=el.files?.[0]; el.value=''; el.blur(); return uploadImage(el.dataset.img, f); } const id=el.dataset.id, f=el.dataset.f; if(!id||!f) return;
   let v = f==='active'?el.checked : el.value.trim();
@@ -576,12 +583,89 @@ $('invWrap').addEventListener('change',async e=>{
   const patch={[f]:v}; if(f!=='active') patch.sample=false;
   const { error } = await sb.from('products').update(patch).eq('id',id);
   if(error) toast(errMsg(error)); else { toast('Guardado'); queue('products','avail'); }
-});
+};
+['invWrap','kitWrap'].forEach(id=>$(id).addEventListener('change',onInvChange));
 $('addForm').onsubmit=async e=>{
   e.preventDefault(); const name=$('a-name').value.trim(), price=Number($('a-price').value.replace(/[^0-9.]/g,'')), stock=Math.round(Number($('a-stock').value.replace(/[^0-9]/g,''))||0);
   if(!name) return toast('Escribe el nombre del producto'); if(!(price>0)) return toast('Escribe el precio');
   const { error } = await sb.from('products').insert({ name, codigo:$('a-codigo').value.trim(), sku:$('a-sku').value.trim(), category:$('a-cat').value.trim(), size:$('a-size').value.trim(), price, stock, active:true, sort_order:S.products.length+1, sample:false });
   if(error) toast(errMsg(error)); else { $('addForm').reset(); toast('Producto agregado'); queue('products','avail'); }
+};
+/* ---------- KITS (products with is_kit + kit_items; selling a kit deducts its components) ---------- */
+const physProducts = () => S.products.filter(p=>!p.is_kit);
+const kitComps = id => (S.kitItems?.[id]||[]).map(c=>({ ...c, p:S.products.find(p=>p.id===c.pid) })).filter(c=>c.p);
+const newKit = () => ({ id:null, items:[] });
+function renderKits(){
+  if(!S.kitEdit) S.kitEdit=newKit();
+  const kits=S.products.filter(p=>p.is_kit).sort((a,b)=>(a.order??999)-(b.order??999)||String(a.name).localeCompare(b.name));
+  $('kitBody').innerHTML = kits.length ? kits.map(k=>{ const i=S.avail[k.id]||{sold:0,held:0,available:0}, cs=kitComps(k.id);
+    const limit=cs.length?cs.reduce((m,c)=>{ const a=Math.floor(Math.max(0,S.avail[c.pid]?.available??0)/c.qty); return a<m.a?{a,n:c.p.name}:m; },{a:Infinity,n:''}).n:'';
+    return `<tr${S.kitEdit.id===k.id?' class="editing"':''}>
+      <td><div class="thumbcell"><div class="thumb">${k.image_url?`<img src="${esc(k.image_url)}" alt="">`:'<span class="muted" style="font-size:12px">—</span>'}</div>
+        <div class="thumbbtns"><label class="linkbtn">${k.image_url?'Cambiar':'Subir'}<input class="vh" type="file" accept="image/*" data-img="${k.id}"></label>${k.image_url?`<button type="button" class="linkbtn rm" data-rmimg="${k.id}">Quitar</button>`:''}</div></div></td>
+      <td><b>${esc(k.name)}</b>${k.size?` <span class="muted">${esc(k.size)}</span>`:''}</td>
+      <td style="font-size:14px">${cs.length?cs.map(c=>`${c.qty}× ${esc(c.p.name)}${c.p.size?` <span class="muted">${esc(c.p.size)}</span>`:''}`).join('<br>'):'<span class="pill p-cancel">Sin productos</span>'}</td>
+      <td class="r num">${money(k.price)}</td><td class="r num">${i.sold}</td><td class="r num">${i.held}</td>
+      <td class="r num ${i.available<=3?'lowstock':''}" title="${limit?'Lo limita: '+esc(limit):''}">${i.available}</td>
+      <td><input type="checkbox" data-f="active" data-id="${k.id}" ${k.active!==false?'checked':''} aria-label="Visible en tienda"></td>
+      <td style="white-space:nowrap"><button type="button" class="linkbtn" data-kedit="${k.id}" style="display:inline;margin-right:12px">Editar</button><button type="button" class="linkbtn rm" data-kdel="${k.id}" style="display:inline">${S.kitDelArm===k.id?'¿Seguro? Toca otra vez':'Eliminar'}</button></td></tr>`; }).join('')
+    : `<tr><td colspan="9" class="empty">${S.staffLoaded?'Aún no hay kits. Crea el primero abajo.':'Cargando…'}</td></tr>`;
+  renderKitForm();
+}
+function renderKitForm(){
+  const ke=S.kitEdit, byId=Object.fromEntries(S.products.map(p=>[p.id,p]));
+  $('kitTitle').textContent = ke.id ? 'Editar kit' : 'Nuevo kit';
+  $('k-save').textContent = ke.id ? 'Guardar cambios' : 'Crear kit';
+  $('k-cancel').hidden = !ke.id;
+  $('k-items').innerHTML = ke.items.length ? ke.items.map((c,ix)=>{ const p=byId[c.pid]; return `<div class="line"><div class="nm"><span class="mini-step"><button type="button" data-kq="${ix}" data-d="-1" aria-label="Menos">−</button><b class="num" style="min-width:24px;text-align:center">${c.qty}</b><button type="button" data-kq="${ix}" data-d="1" aria-label="Más">+</button></span> ${esc(p?.name||'(producto borrado)')} <span class="muted">${esc(p?.size||'')}</span></div><span class="num">${money((p?.price||0)*c.qty)} <button type="button" class="linkbtn rm" data-krm="${ix}" style="display:inline;margin-left:8px">Quitar</button></span></div>`; }).join('')
+    : '<p class="muted" style="margin:0">Agrega los productos que lleva el kit.</p>';
+  if(document.activeElement?.id!=='k-add'){
+    const inKit=new Set(ke.items.map(c=>c.pid));
+    $('k-add').innerHTML='<option value="">+ Agregar producto al kit…</option>'+physProducts().filter(p=>!inKit.has(p.id)).sort((a,b)=>(a.order??999)-(b.order??999)||String(a.name).localeCompare(b.name))
+      .map(p=>`<option value="${p.id}">${esc(p.name)} ${esc(p.size||'')} · ${money(p.price)}${p.active===false?' (oculto)':''}</option>`).join('');
+  }
+  const sep=ke.items.reduce((a,c)=>a+(byId[c.pid]?.price||0)*c.qty,0), price=Number(String($('k-price').value).replace(/[^0-9.]/g,''));
+  $('k-sum').textContent = ke.items.length ? `${ke.items.reduce((a,c)=>a+c.qty,0)} piezas · por separado ${money(sep)}${price>0&&price<sep?` · ahorro ${money(sep-price)}`:''}` : '';
+}
+function editKit(id){
+  const k=S.products.find(p=>p.id===id); if(!k) return;
+  S.kitEdit={ id, items:(S.kitItems?.[id]||[]).map(c=>({...c})) };
+  $('k-name').value=k.name; $('k-price').value=k.price; $('k-size').value=k.size||'';
+  renderKits(); $('kitForm').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function resetKitForm(){ S.kitEdit=newKit(); $('kitForm').reset(); renderKits(); }
+$('kitWrap').addEventListener('click',async e=>{
+  const ed=e.target.closest('[data-kedit]'); if(ed) return editKit(ed.dataset.kedit);
+  const del=e.target.closest('[data-kdel]'); if(!del) return;
+  const id=del.dataset.kdel;
+  if(S.kitDelArm!==id){ S.kitDelArm=id; renderKits(); return; }
+  S.kitDelArm=null;
+  try{ const old=storagePath(S.products.find(p=>p.id===id)?.image_url);
+    await rpc('delete_kit',{ p_id:id }); if(old) sb.storage.from(BUCKET).remove([old]);
+    if(S.kitEdit.id===id) resetKitForm(); toast('Kit eliminado'); queue('products','kits','avail');
+  }catch(ex){ toast(errMsg(ex)); renderKits(); }
+});
+$('k-items').onclick=e=>{
+  const ke=S.kitEdit, q=e.target.closest('[data-kq]'), rm=e.target.closest('[data-krm]');
+  if(q){ const c=ke.items[+q.dataset.kq]; c.qty=Math.max(1,Math.min(20,c.qty+ +q.dataset.d)); }
+  else if(rm) ke.items.splice(+rm.dataset.krm,1); else return;
+  renderKitForm();
+};
+$('k-add').onchange=e=>{ const pid=e.target.value; e.target.blur(); if(pid && !S.kitEdit.items.some(c=>c.pid===pid)) S.kitEdit.items.push({pid,qty:1}); renderKitForm(); };
+$('k-price').oninput=renderKitForm;
+$('k-cancel').onclick=resetKitForm;
+$('kitForm').onsubmit=async e=>{
+  e.preventDefault(); if(S.busy) return;
+  const ke=S.kitEdit, name=$('k-name').value.trim(), price=Number(String($('k-price').value).replace(/[^0-9.]/g,''));
+  if(!name) return toast('Escribe el nombre del kit'); if(!(price>0)) return toast('Escribe el precio final del kit');
+  if(!ke.items.length) return toast('Agrega al menos un producto al kit');
+  S.busy=true; $('k-save').disabled=true;
+  try{
+    const cur=ke.id?S.products.find(p=>p.id===ke.id):null;
+    await rpc('save_kit',{ p:{ id:ke.id, name, price, size:$('k-size').value.trim(), category:cur?.category||'Kits', items:ke.items } });
+    toast(ke.id?'Kit actualizado':'Kit creado'); resetKitForm(); queue('products','kits','avail');
+  }catch(ex){ toast(errMsg(ex)); }
+  finally{ S.busy=false; $('k-save').disabled=false; }
 };
 $('cfgForm').onsubmit=async e=>{
   e.preventDefault();
@@ -602,31 +686,41 @@ function save(filename,text){
 }
 const stamp=()=>new Date().toISOString().slice(0,10);
 $('expOrders').onclick=async()=>{ await Promise.all([load('orders'),load('returns')]);
-  const rows=[['Pedido','Estado','Creado','Cobrado','Forma de pago','Referencia','Nombre','Apellido','Celular','Correo','Comunidad','Dermo-Consejera','Factura','Producto','Tamaño','Cantidad','Devuelto','Precio','Subtotal','Total pedido','Reembolso pedido','Neto pedido']];
-  for(const o of [...S.orders].sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)))) for(const i of o.items||[]) rows.push([o.number,(STATUS[o.status]?.[0]||o.status)+(retInfo(o.number).amount?(netUnits(o)<=0?' · Devuelto total':' · Con devolución'):''),o.createdAt,o.paidAt||'',o.payMethod||'',o.payRef||'',o.customer?.nombre,o.customer?.apellido,o.customer?.telefono,o.customer?.email,o.community?'Sí':'No',o.consejera||'',o.factura?'Sí':'No',i.name,i.size,i.qty,retInfo(o.number).qty[i.pid]||0,i.price,i.qty*i.price,o.total,retInfo(o.number).amount,netTotal(o)]);
+  const rows=[['Pedido','Estado','Creado','Cobrado','Forma de pago','Referencia','Nombre','Apellido','Celular','Correo','Comunidad','Dermo-Consejera','Factura','Producto','Tamaño','Cantidad','Devuelto','Precio','Subtotal','Total pedido','Reembolso pedido','Neto pedido','Contenido del kit']];
+  for(const o of [...S.orders].sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)))) for(const i of o.items||[]) rows.push([o.number,(STATUS[o.status]?.[0]||o.status)+(retInfo(o.number).amount?(netUnits(o)<=0?' · Devuelto total':' · Con devolución'):''),o.createdAt,o.paidAt||'',o.payMethod||'',o.payRef||'',o.customer?.nombre,o.customer?.apellido,o.customer?.telefono,o.customer?.email,o.community?'Sí':'No',o.consejera||'',o.factura?'Sí':'No',i.name,i.size,i.qty,retInfo(o.number).qty[i.pid]||0,i.price,i.qty*i.price,o.total,retInfo(o.number).amount,netTotal(o),compsTxt(i.comps,i.qty)]);
   save(`mustela-pedidos-${stamp()}.csv`,csv(rows)); };
 // Long numeric codes (EAN) as text so Excel doesn't turn them into 3.5E+12
 const xtxt = v => v ? `="${v}"` : '';
 /* Inventario y ventas: inicial, resurtido, vendido (unidades y $ netos de devoluciones), final. Agrupado por línea. */
 async function exportInvSales(){
-  await Promise.all([load('products'),load('orders'),load('returns')]);
-  const u={}, m={};
-  for(const o of S.orders){ if(!SOLD.includes(o.status)) continue; for(const i of o.items||[]){ u[i.pid]=(u[i.pid]||0)+i.qty; m[i.pid]=(m[i.pid]||0)+i.qty*i.price; } }
-  for(const r of S.returns) for(const i of r.items||[]){ u[i.pid]=(u[i.pid]||0)-(i.qty||0); m[i.pid]=(m[i.pid]||0)-(i.qty||0)*(Number(i.price)||0); }
-  const head=['Código','SKU','Descripción','Inv. inicial','Resurtido','Inv. final','Vendido (unidades)','Precio','Ventas ($)'];
-  const prods=[...S.products].sort((a,b)=>(a.order??999)-(b.order??999)||String(a.name).localeCompare(b.name));
+  await Promise.all([load('products'),load('kits'),load('orders'),load('returns')]);
+  // u = units of the line itself (product or kit), m = $ of the line, ku = units that left inside kits
+  const u={}, m={}, ku={};
+  const add=(i,sg)=>{ const q=(i.qty||0)*sg; u[i.pid]=(u[i.pid]||0)+q; m[i.pid]=(m[i.pid]||0)+q*(Number(i.price)||0); for(const c of i.comps||[]) ku[c.pid]=(ku[c.pid]||0)+q*(c.qty||1); };
+  for(const o of S.orders){ if(!SOLD.includes(o.status)) continue; for(const i of o.items||[]) add(i,1); }
+  for(const r of S.returns) for(const i of r.items||[]) add(i,-1);
+  const head=['Código','SKU','Descripción','Inv. inicial','Resurtido','Inv. final','Vendido (unidades)','De ellas en kits','Precio','Ventas ($)'];
+  const prods=physProducts().sort((a,b)=>(a.order??999)-(b.order??999)||String(a.name).localeCompare(b.name));
+  const kits=S.products.filter(p=>p.is_kit).sort((a,b)=>(a.order??999)-(b.order??999)||String(a.name).localeCompare(b.name));
   const cats=[...new Set(prods.map(p=>p.category||'Sin línea'))];
   const rows=[['Inventario y ventas',S.cfg.evento||'Expo'],['Generado',new Date().toLocaleString('es-MX',{timeZone:TZ})],[],head];
-  const T={ini:0,res:0,fin:0,u:0,m:0};
+  const T={ini:0,res:0,fin:0,u:0,k:0,m:0};
   for(const c of cats){
     rows.push(['',c.toUpperCase()]);
     for(const p of prods.filter(p=>(p.category||'Sin línea')===c)){
-      const sold=u[p.id]||0, money_=Math.round((m[p.id]||0)*100)/100, ini=p.stock||0, res=p.restock||0, fin=ini+res-sold;
-      rows.push([xtxt(p.codigo),xtxt(p.sku),[p.name,p.size].filter(Boolean).join(' '),ini,res,fin,sold,p.price,money_]);
-      T.ini+=ini; T.res+=res; T.fin+=fin; T.u+=sold; T.m+=money_;
+      const inKits=ku[p.id]||0, sold=(u[p.id]||0)+inKits, money_=Math.round((m[p.id]||0)*100)/100, ini=p.stock||0, res=p.restock||0, fin=ini+res-sold;
+      rows.push([xtxt(p.codigo),xtxt(p.sku),[p.name,p.size].filter(Boolean).join(' '),ini,res,fin,sold,inKits,p.price,money_]);
+      T.ini+=ini; T.res+=res; T.fin+=fin; T.u+=sold; T.k+=inKits; T.m+=money_;
     }
   }
-  rows.push([],['','TOTAL','',T.ini,T.res,T.fin,T.u,'',Math.round(T.m*100)/100]);
+  let nk=0;
+  if(kits.length){
+    rows.push(['','KITS ARMADOS (sus piezas ya se descontaron arriba)']);
+    for(const k of kits){ const sold=u[k.id]||0, money_=Math.round((m[k.id]||0)*100)/100; nk+=sold; T.m+=money_;
+      rows.push(['','',k.name+' — '+compsTxt(kitComps(k.id).map(c=>({qty:c.qty,name:c.p.name,size:c.p.size}))),'','','',sold,'',k.price,money_]); }
+  }
+  rows.push([],['','TOTAL','',T.ini,T.res,T.fin,T.u,T.k,'',Math.round(T.m*100)/100]);
+  if(nk) rows.push(['','Kits vendidos','','','','',nk]);
   save(`mustela-inventario-ventas-${stamp()}.csv`,csv(rows));
 }
 $('expInvSales').onclick=exportInvSales;
@@ -680,7 +774,7 @@ $('impFile').onchange=async e=>{
   for(const [k,al] of Object.entries(COLS)){ const i=head.findIndex(h=>al.includes(h)); if(i>=0) idx[k]=i; }
   const missing=['name','price','stock'].filter(k=>idx[k]===undefined);
   if(missing.length) return showImp({error:`Faltan columnas: ${missing.map(k=>({name:'nombre',price:'precio',stock:'stock'})[k]).join(', ')}. Descarga la plantilla para ver el formato.`});
-  const byId=new Map(S.products.map(p=>[p.id,p])), byKey=new Map(S.products.map(p=>[norm(p.name)+'|'+norm(p.size),p]));
+  const byId=new Map(physProducts().map(p=>[p.id,p])), byKey=new Map(physProducts().map(p=>[norm(p.name)+'|'+norm(p.size),p]));
   const seen=new Set(), items=[];
   rows.slice(1).forEach((r,n)=>{
     const g=k=>idx[k]===undefined?undefined:String(r[idx[k]]??'').trim().replace(/^="(.*)"$/,'$1');
@@ -698,7 +792,7 @@ $('impFile').onchange=async e=>{
   });
   const ok=items.filter(i=>!i.err);
   const keep=new Set(ok.map(i=>i.match?.id).filter(Boolean));
-  const hide=S.products.filter(p=>!keep.has(p.id)&&p.active!==false);
+  const hide=physProducts().filter(p=>!keep.has(p.id)&&p.active!==false);
   IMP={ items, ok, hide, file:file.name };
   showImp({});
 };
@@ -737,7 +831,7 @@ $('importBox').addEventListener('click',async e=>{
 });
 $('expCatalog').onclick=async()=>{ await load('products');
   const rows=[['id','codigo','sku','nombre','linea','tamaño','precio','inv_inicial','resurtido','visible','orden','imagen_url']];
-  for(const p of [...S.products].sort((a,b)=>(a.order??999)-(b.order??999))) rows.push([p.id,xtxt(p.codigo),xtxt(p.sku),p.name,p.category,p.size,p.price,p.stock,p.restock||0,p.active!==false?'sí':'no',p.order??'',p.image_url||'']);
+  for(const p of physProducts().sort((a,b)=>(a.order??999)-(b.order??999))) rows.push([p.id,xtxt(p.codigo),xtxt(p.sku),p.name,p.category,p.size,p.price,p.stock,p.restock||0,p.active!==false?'sí':'no',p.order??'',p.image_url||'']);
   if(rows.length===1) rows.push(['','87035893','3504105035891','Ejemplo de producto','Bebé','300 ml','389','40','0','sí','1','']);
   save(`mustela-catalogo-${stamp()}.csv`,csv(rows)); };
 
