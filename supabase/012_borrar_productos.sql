@@ -8,8 +8,7 @@ begin
   if not public.has_perm('inventario') then raise exception 'sin_permiso'; end if;
   if exists (select 1 from public.orders o, jsonb_array_elements(o.items) i
              where i ->> 'pid' = p_id::text
-                or exists (select 1 from jsonb_array_elements(coalesce(i -> 'comps', '[]'::jsonb)) c where c ->> 'pid' = p_id::text))
-     or exists (select 1 from public.orders_archive a, jsonb_array_elements(a.data -> 'items') i where i ->> 'pid' = p_id::text) then
+                or exists (select 1 from jsonb_array_elements(coalesce(i -> 'comps', '[]'::jsonb)) c where c ->> 'pid' = p_id::text)) then
     raise exception 'producto_con_ventas';
   end if;
   if exists (select 1 from public.kit_items where product_id = p_id) then raise exception 'producto_en_kit'; end if;

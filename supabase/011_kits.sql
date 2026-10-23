@@ -416,8 +416,7 @@ language plpgsql volatile security definer set search_path = public as $$
 begin
   if not public.is_staff() then raise exception 'no_autorizado'; end if;
   if not public.has_perm('inventario') then raise exception 'sin_permiso'; end if;
-  if exists (select 1 from public.orders o, jsonb_array_elements(o.items) i where i ->> 'pid' = p_id::text)
-     or exists (select 1 from public.orders_archive a, jsonb_array_elements(a.data -> 'items') i where i ->> 'pid' = p_id::text) then
+  if exists (select 1 from public.orders o, jsonb_array_elements(o.items) i where i ->> 'pid' = p_id::text) then
     raise exception 'kit_con_ventas';
   end if;
   delete from public.products where id = p_id and is_kit;
