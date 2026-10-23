@@ -15,6 +15,8 @@ const VIEWS = ['inicio','login','tienda','comunidad','caja','surtido','inventari
 const KIOSK = ['tienda','comunidad'];
 const STAFF = ['caja','surtido','inventario','corte','personal'];
 const SOLD = ['pagado','listo','entregado'];
+const canSee = v => !STAFF.includes(v) || (S.perms||[]).includes(v);
+const firstAllowed = () => ['caja','surtido','inventario','corte','personal'].find(v=>(S.perms||[]).includes(v)) || 'inicio';
 
 const S = {
   view:'inicio', after:'caja',
@@ -45,7 +47,7 @@ function errMsg(e){
     correo_invalido:'Revisa el correo, parece incompleto.', correo_requerido:'Para unirte a la Comunidad necesitamos tu correo.',
     privacidad_requerida:'Para continuar acepta el aviso de privacidad.', pedido_vacio:'El pedido está vacío.',
     producto_no_disponible:'Un producto ya no está disponible. Revisa tu pedido.', cantidad_invalida:'Revisa las cantidades del pedido.',
-    no_autorizado:'Tu usuario no tiene acceso de personal.', pedido_no_existe:'Ese pedido no existe.',
+    no_autorizado:'Tu usuario no tiene acceso de personal.', sin_permiso:'Tu usuario no tiene permiso para esta acción.', 'row-level security':'Tu usuario no tiene permiso para esta acción.', pedido_no_existe:'Ese pedido no existe.',
     pedido_ya_procesado:'Ese pedido ya fue procesado en otro dispositivo.', cambio_invalido:'Ese pedido cambió en otro dispositivo. Revisa la lista.',
     metodo_invalido:'Elige la forma de pago.', pedido_no_cobrado:'Solo se pueden devolver pedidos cobrados.', producto_no_en_pedido:'Ese producto no está en el pedido.', devolucion_vacia:'Marca al menos una pieza para devolver.', sin_numeros:'No se pudo generar el número. Intenta de nuevo.',
   };
@@ -61,6 +63,7 @@ async function rpc(fn, args){ const { data, error } = await sb.rpc(fn, args); if
 function go(v){
   if(!VIEWS.includes(v)) v='inicio';
   if(STAFF.includes(v) && !S.isStaff){ S.after=v; v='login'; }
+  else if(STAFF.includes(v) && !canSee(v)){ toast('Tu usuario no tiene acceso a esa pantalla'); v=firstAllowed(); }
   S.view=v;
   try{ history.replaceState(null,'','#'+(v==='login'?S.after:v)); }catch(e){}
   for(const x of VIEWS) $('v-'+x).hidden = x!==v;
@@ -68,8 +71,8 @@ function go(v){
   $('topbar').hidden = kiosk || v==='login';
   $('staffLink').hidden = !kiosk;
   document.querySelectorAll('#tabs .tab').forEach(b=>b.setAttribute('aria-current', String(b.dataset.go===v)));
-  $('tabs').querySelectorAll('[data-go="caja"],[data-go="surtido"],[data-go="inventario"],[data-go="corte"]').forEach(b=>b.hidden=!S.isStaff);
-  $('tabs').querySelector('[data-go="personal"]').hidden=!S.isAdmin;
+  $('tabs').querySelectorAll('[data-go="caja"],[data-go="surtido"],[data-go="inventario"],[data-go="corte"],[data-go="personal"]').forEach(b=>b.hidden=!(S.isStaff&&canSee(b.dataset.go)));
+  document.querySelectorAll('#v-inicio .ltile[data-go]').forEach(b=>b.hidden=STAFF.includes(b.dataset.go)&&S.isStaff&&!canSee(b.dataset.go));
   if(v==='tienda'){ resetKiosk(); loadKiosk(); }
   if(v==='comunidad'){ resetCommunity(); loadKiosk(); }
   if(STAFF.includes(v)) startStaff();
@@ -99,7 +102,9 @@ async function refreshAuth(){
   S.isStaff = false;
   S.isAdmin = false;
   if(S.session){ try{ S.isStaff = !!(await rpc('is_staff')); }catch(e){ S.isStaff=false; } }
-  if(S.isStaff){ try{ S.isAdmin = !!(await rpc('is_admin')); }catch(e){ S.isAdmin=false; } }
+  S.perms=[];
+  if(S.isStaff){ try{ const { data } = await sb.from('staff').select('admin,perms').eq('email', (S.session.user.email||'').toLowerCase()).maybeSingle();
+      S.isAdmin = !!data?.admin; S.perms = data?.admin ? ['caja','surtido','inventario','corte','personal'] : (data?.perms||[]); }catch(e){ S.isAdmin=false; } }
   $('who').hidden = !S.session;
   $('whoEmail').textContent = S.session?.user?.email || '';
 }
@@ -114,7 +119,7 @@ $('loginForm').onsubmit=async e=>{
     await refreshAuth();
     if(!S.isStaff){ await sb.auth.signOut(); await refreshAuth(); return err('Este usuario no está dado de alta como personal. Pide acceso al administrador.'); }
     $('l-pass').value='';
-    go(S.after);
+    go(canSee(S.after)?S.after:firstAllowed());
   } finally { $('loginBtn').disabled=false; }
 };
 $('loginBack').onclick=()=>go('inicio');
@@ -754,7 +759,7 @@ function renderPersonal(){
   const me=(S.session?.user?.email||'').toLowerCase();
   $('perBody').innerHTML=(S.staff||[]).map(u=>`<tr>
     <td>${esc(u.nombre||'')}</td><td>${esc(u.email)}${u.email===me?' <span class="pill p-paid">tú</span>':''}</td>
-    <td><input type="checkbox" data-padmin="${esc(u.email)}" ${u.admin?'checked':''} aria-label="Administrador"></td>
+    <td><div class="permcell">${['caja','surtido','inventario','corte'].map(k=>`<label class="check"><input type="checkbox" data-pperm="${k}" data-pe="${esc(u.email)}" ${u.admin||(u.perms||[]).includes(k)?'checked':''} ${u.admin?'disabled':''}><span>${k[0].toUpperCase()+k.slice(1)}</span></label>`).join('')}<label class="check"><input type="checkbox" data-padmin="${esc(u.email)}" ${u.admin?'checked':''}><span><b>Admin</b></span></label></div></td>
     <td>${S.pwFor===u.email
       ?`<span style="display:inline-flex;gap:6px;flex-wrap:wrap"><input id="pw-new" style="width:170px;min-height:36px" placeholder="Nueva contraseña" value="${esc(S.pwDraft||'')}"><button type="button" class="btn sm primary" data-pwsave="${esc(u.email)}">Guardar</button><button type="button" class="btn sm ghost" data-pwcancel>Cancelar</button></span>`
       :`<button type="button" class="linkbtn" data-pw="${esc(u.email)}" style="display:inline;margin-right:12px">Cambiar contraseña</button>${u.email!==me?`<button type="button" class="linkbtn rm" data-prm="${esc(u.email)}" style="display:inline">${S.rmArm===u.email?'¿Seguro? Toca otra vez':'Quitar'}</button>`:''}`}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">Sin usuarios</td></tr>';
@@ -765,13 +770,21 @@ $('perForm').onsubmit=async e=>{
   const email=$('p-email').value.trim().toLowerCase(), password=$('p-pass').value, nombre=$('p-nombre').value.trim(), admin=$('p-admin').checked;
   if(!okMail(email)) return toast('Revisa el correo.'); if(password.length<8) return toast('La contraseña debe tener al menos 8 caracteres.');
   $('p-go').disabled=true;
-  const r=await staffApi({ action:'create', email, password, nombre, admin });
+  const perms=[...document.querySelectorAll('#p-perms input:checked')].map(x=>x.value);
+  if(!admin && !perms.length) return toast('Elige al menos una pantalla o márcalo como administrador.');
+  const r=await staffApi({ action:'create', email, password, nombre, admin, perms });
   $('p-go').disabled=false;
   if(!r.ok) return toast(staffErr(r));
   $('perMsg').innerHTML=`Usuario listo. Comparte estos datos: <b>${esc(email)}</b> · contraseña <b>${esc(password)}</b> · ${esc(location.origin)}`; $('perMsg').hidden=false;
   $('perForm').reset(); queue('staff');
 };
+$('p-admin').onchange=()=>document.querySelectorAll('#p-perms input').forEach(x=>{ x.disabled=$('p-admin').checked; if($('p-admin').checked) x.checked=true; });
 $('perBody').addEventListener('change',async e=>{
+  const pp=e.target.closest('[data-pperm]');
+  if(pp){ const em=pp.dataset.pe; const perms=[...document.querySelectorAll(`#perBody [data-pperm][data-pe="${CSS.escape(em)}"]:checked`)].map(x=>x.dataset.pperm);
+    pp.disabled=true; const r=await staffApi({ action:'set_perms', email:em, perms }); pp.disabled=false;
+    if(!r.ok){ pp.checked=!pp.checked; toast(staffErr(r)); } else toast('Acceso actualizado');
+    queue('staff'); return; }
   const c=e.target.closest('[data-padmin]'); if(!c) return;
   c.disabled=true; const r=await staffApi({ action:'set_admin', email:c.dataset.padmin, admin:c.checked }); c.disabled=false;
   if(!r.ok){ c.checked=!c.checked; toast(staffErr(r)); } else toast(c.checked?'Ahora es administrador':'Ya no es administrador');

@@ -6,6 +6,8 @@ export default async function handler(req, res) {
   catch (e) { return res.status(500).json({ ok: false, error: 'excepcion', detail: String(e?.message || e).slice(0, 160) }); }
 }
 
+const PERMS = ['caja', 'surtido', 'inventario', 'corte'];
+const cleanPerms = a => [...new Set((Array.isArray(a) ? a : []).filter(x => PERMS.includes(x)))];
 const emailOk = e => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
 
 async function run(req, res) {
@@ -57,7 +59,7 @@ async function run(req, res) {
       if (!r.ok) return res.status(400).json({ ok: false, error: 'auth', detail: (await r.text()).slice(0, 160) });
     }
     const s = await rest('staff?on_conflict=email', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify({ email, nombre: String(body.nombre || '').trim().slice(0, 80), admin: !!body.admin }) });
+      body: JSON.stringify({ email, nombre: String(body.nombre || '').trim().slice(0, 80), admin: !!body.admin, perms: body.perms === undefined ? PERMS : cleanPerms(body.perms) }) });
     if (!s.ok) return res.status(500).json({ ok: false, error: 'error_db', detail: (await s.text()).slice(0, 160) });
     return res.status(200).json({ ok: true, created });
   }
@@ -66,6 +68,11 @@ async function run(req, res) {
     const val = !!body.admin;
     if (!val) { const a = await admins(); if (a.length <= 1 && a.includes(email)) return res.status(400).json({ ok: false, error: 'ultimo_admin' }); }
     const r = await rest(`staff?email=eq.${encodeURIComponent(email)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ admin: val }) });
+    return res.status(r.ok ? 200 : 500).json({ ok: r.ok });
+  }
+
+  if (action === 'set_perms') {
+    const r = await rest(`staff?email=eq.${encodeURIComponent(email)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ perms: cleanPerms(body.perms) }) });
     return res.status(r.ok ? 200 : 500).json({ ok: r.ok });
   }
 

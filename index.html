@@ -187,6 +187,9 @@ a{color:var(--accent)}
 .who{display:flex;align-items:center;gap:10px;font-size:14px}
 .login{max-width:420px;margin:8vh auto 0;display:grid;gap:16px}
 .chkrow{display:flex;flex-wrap:wrap;gap:10px 20px}
+.permcell{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px}
+.permcell .check{font-size:14px;gap:6px;align-items:center}
+.permcell input[type=checkbox]{width:20px;height:20px}
 </style>
 </head>
 <body>
@@ -299,7 +302,7 @@ a{color:var(--accent)}
             <label class="check"><input type="checkbox" id="c-join" checked><span><b>Quiero unirme a la Comunidad Mustela</b><br><span class="muted">Consejos para el cuidado de la piel de tu bebé, lanzamientos y beneficios exclusivos.</span></span></label>
             <div id="c-joinFields" class="grid2">
               <label class="f">Etapa
-                <select id="c-etapa"><option value="">Selecciona…</option><option>Estoy embarazada</option><option>Bebé de 0 a 12 meses</option><option>Niño de 1 a 3 años</option><option>Niño de 3 años o más</option><option>Otro</option></select>
+                <select id="c-etapa"><option value="">Selecciona…</option><option>Estoy embarazada</option><option>Soy papá</option><option>Bebé de 0 a 12 meses</option><option>Niño de 1 a 3 años</option><option>Niño de 3 años o más</option><option>Otro</option></select>
               </label>
               <label class="f">Ciudad<input id="c-ciudad" autocomplete="off"></label>
               <div class="chkrow" style="grid-column:1/-1">
@@ -347,6 +350,7 @@ a{color:var(--accent)}
           <span class="f" style="font-weight:600">¿En qué etapa estás?</span>
           <div class="stage" id="m-etapa">
             <label><input type="radio" name="etapa" value="Estoy embarazada"><span>Estoy embarazada</span></label>
+            <label><input type="radio" name="etapa" value="Soy papá"><span>Soy papá</span></label>
             <label><input type="radio" name="etapa" value="Bebé de 0 a 12 meses"><span>Bebé de 0 a 12 meses</span></label>
             <label><input type="radio" name="etapa" value="Niño de 1 a 3 años"><span>Niño de 1 a 3 años</span></label>
             <label><input type="radio" name="etapa" value="Niño de 3 años o más"><span>3 años o más</span></label>
@@ -443,7 +447,7 @@ a{color:var(--accent)}
     <h1 style="margin-bottom:16px">Personal</h1>
     <div id="perNoAdmin" class="panel empty" hidden>Solo un administrador puede gestionar al personal.</div>
     <div id="perBox" style="display:grid;gap:20px">
-      <div class="tscroll"><table style="min-width:640px"><thead><tr><th>Nombre</th><th>Correo</th><th>Admin</th><th>Acciones</th></tr></thead><tbody id="perBody"></tbody></table></div>
+      <div class="tscroll"><table style="min-width:640px"><thead><tr><th>Nombre</th><th>Correo</th><th>Acceso</th><th>Acciones</th></tr></thead><tbody id="perBody"></tbody></table></div>
       <form id="perForm" class="panel" style="display:grid;gap:14px" novalidate>
         <h3>Agregar usuario</h3>
         <div class="grid2">
@@ -451,11 +455,19 @@ a{color:var(--accent)}
           <label class="f">Correo<input id="p-email" type="email" inputmode="email" autocomplete="off"></label>
           <label class="f">Contraseña (mín. 8)<span style="display:flex;gap:8px"><input id="p-pass" autocomplete="off"><button type="button" class="btn sm ghost" id="p-gen">Generar</button></span></label>
         </div>
-        <label class="check"><input type="checkbox" id="p-admin"><span><b>Administrador</b><br><span class="muted">Puede gestionar personal, borrar ventas de prueba y restaurarlas.</span></span></label>
+        <div style="display:grid;gap:8px"><span class="f" style="font-weight:600">Acceso</span>
+          <div class="chkrow" id="p-perms">
+            <label class="check"><input type="checkbox" value="caja" checked><span>Caja</span></label>
+            <label class="check"><input type="checkbox" value="surtido" checked><span>Surtido</span></label>
+            <label class="check"><input type="checkbox" value="inventario" checked><span>Inventario</span></label>
+            <label class="check"><input type="checkbox" value="corte" checked><span>Corte</span></label>
+          </div>
+          <label class="check"><input type="checkbox" id="p-admin"><span><b>Administrador (todo)</b><br><span class="muted">Acceso a todas las pantallas, gestiona personal y puede borrar/restaurar ventas de prueba.</span></span></label>
+        </div>
         <p id="perMsg" class="banner warn" hidden style="margin:0"></p>
         <div><button class="btn primary" id="p-go">Crear usuario</button></div>
       </form>
-      <p class="muted" style="margin:0;font-size:14px">Todos los usuarios pueden usar Caja, Surtido, Inventario y Corte. Si el correo ya existía en Supabase, se le asigna la contraseña nueva.</p>
+      <p class="muted" style="margin:0;font-size:14px">Las pantallas de tablet (Tienda y Comunidad) no requieren cuenta. Si el correo ya existía en Supabase, se le asigna la contraseña nueva.</p>
     </div>
   </section>
 

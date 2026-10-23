@@ -9,6 +9,7 @@ create table if not exists public.staff (
   email      text primary key check (email = lower(email)),
   nombre     text,
   admin      boolean not null default false,
+  perms      text[] not null default '{caja,surtido,inventario,corte}',
   created_at timestamptz not null default now()
 );
 
@@ -102,6 +103,16 @@ language sql stable security definer set search_path = public as $$
   select exists (
     select 1 from public.staff
     where email = lower(coalesce(auth.jwt() ->> 'email', ''))
+  );
+$$;
+
+-- Screen-level permissions: admin = everything; otherwise perms lists caja/surtido/inventario/corte.
+create or replace function public.has_perm(p text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.staff
+    where email = lower(coalesce(auth.jwt() ->> 'email', ''))
+      and (admin or p = any(perms))
   );
 $$;
 
@@ -290,6 +301,7 @@ declare
   r record;
 begin
   if not public.is_staff() then raise exception 'no_autorizado'; end if;
+  if not (public.has_perm('caja')) then raise exception 'sin_permiso'; end if;
   if p_method not in ('Tarjeta','Efectivo','Transferencia') then raise exception 'metodo_invalido'; end if;
   select * into o from public.orders where number = p_number for update;
   if not found then raise exception 'pedido_no_existe'; end if;
@@ -329,6 +341,7 @@ declare
   r record;
 begin
   if not public.is_staff() then raise exception 'no_autorizado'; end if;
+  if not (public.has_perm('caja')) then raise exception 'sin_permiso'; end if;
   select * into o from public.orders where number = p_number for update;
   if not found then raise exception 'pedido_no_existe'; end if;
   if o.status <> 'pendiente' then raise exception 'pedido_ya_procesado'; end if;
@@ -389,6 +402,7 @@ declare
   r record;
 begin
   if not public.is_staff() then raise exception 'no_autorizado'; end if;
+  if not (public.has_perm('caja')) then raise exception 'sin_permiso'; end if;
   if p_method not in ('Tarjeta','Efectivo','Transferencia') then raise exception 'metodo_invalido'; end if;
   select * into o from public.orders where number = p_number for update;
   if not found then raise exception 'pedido_no_existe'; end if;
@@ -436,6 +450,7 @@ declare
   v_from text;
 begin
   if not public.is_staff() then raise exception 'no_autorizado'; end if;
+  if not (case when p_status = 'cancelado' then public.has_perm('caja') else (public.has_perm('caja') or public.has_perm('surtido')) end) then raise exception 'sin_permiso'; end if;
   select status into v_from from public.orders where number = p_number for update;
   if not found then raise exception 'pedido_no_existe'; end if;
   if (v_from, p_status) not in (('pendiente','cancelado'), ('pagado','listo'), ('listo','entregado'), ('listo','pagado')) then
@@ -466,10 +481,10 @@ create policy staff_read on public.staff for select to authenticated using (publ
 drop policy if exists settings_staff_read on public.settings;
 create policy settings_staff_read on public.settings for select to authenticated using (public.is_staff());
 drop policy if exists settings_staff_update on public.settings;
-create policy settings_staff_update on public.settings for update to authenticated using (public.is_staff()) with check (public.is_staff());
+create policy settings_staff_update on public.settings for update to authenticated using (public.has_perm('inventario')) with check (public.has_perm('inventario'));
 
 drop policy if exists products_staff_all on public.products;
-create policy products_staff_all on public.products for all to authenticated using (public.is_staff()) with check (public.is_staff());
+create policy products_staff_all on public.products for all to authenticated using (public.is_staff()) with check (public.has_perm('inventario'));
 
 -- Orders: staff read; every change goes through the RPCs above.
 drop policy if exists orders_staff_read on public.orders;
@@ -630,3 +645,6 @@ grant  execute on function public.reset_event_data(text, boolean) to authenticat
 
 -- Staff management function (api/staff.js)
 grant select, insert, update, delete on public.staff to service_role;
+
+revoke execute on function public.has_perm(text) from public, anon;
+grant  execute on function public.has_perm(text) to authenticated;
