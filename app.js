@@ -49,7 +49,7 @@ function errMsg(e){
     producto_no_disponible:'Un producto ya no está disponible. Revisa tu pedido.', cantidad_invalida:'Revisa las cantidades del pedido.',
     no_autorizado:'Tu usuario no tiene acceso de personal.', sin_permiso:'Tu usuario no tiene permiso para esta acción.', 'row-level security':'Tu usuario no tiene permiso para esta acción.', pedido_no_existe:'Ese pedido no existe.',
     pedido_ya_procesado:'Ese pedido ya fue procesado en otro dispositivo.', cambio_invalido:'Ese pedido cambió en otro dispositivo. Revisa la lista.',
-    metodo_invalido:'Elige la forma de pago.', pedido_no_cobrado:'Solo se pueden devolver pedidos cobrados.', producto_no_en_pedido:'Ese producto no está en el pedido.', devolucion_vacia:'Marca al menos una pieza para devolver.', kit_sin_nombre:'Escribe el nombre del kit.', kit_precio:'Escribe el precio final del kit.', kit_sin_productos:'Agrega al menos un producto al kit.', kit_producto_invalido:'Un producto del kit no es válido (no se puede meter un kit dentro de otro).', kit_no_existe:'Ese kit ya no existe.', kit_con_ventas:'Este kit ya tiene ventas y no se puede eliminar. Desmarca “Visible” para ocultarlo de la tienda.', sin_numeros:'No se pudo generar el número. Intenta de nuevo.',
+    metodo_invalido:'Elige la forma de pago.', pedido_no_cobrado:'Solo se pueden devolver pedidos cobrados.', producto_no_en_pedido:'Ese producto no está en el pedido.', devolucion_vacia:'Marca al menos una pieza para devolver.', producto_con_ventas:'Este producto ya tiene pedidos y no se puede eliminar. Desmarca “Visible” para ocultarlo de la tienda.', producto_en_kit:'Este producto está dentro de un kit. Quítalo del kit primero.', kit_sin_nombre:'Escribe el nombre del kit.', kit_precio:'Escribe el precio final del kit.', kit_sin_productos:'Agrega al menos un producto al kit.', kit_producto_invalido:'Un producto del kit no es válido (no se puede meter un kit dentro de otro).', kit_no_existe:'Ese kit ya no existe.', kit_con_ventas:'Este kit ya tiene ventas y no se puede eliminar. Desmarca “Visible” para ocultarlo de la tienda.', sin_numeros:'No se pudo generar el número. Intenta de nuevo.',
   };
   for (const k in map) if (m.includes(k)) return map[k];
   if (e?.code==='PGRST202' || /Could not find the function|does not exist|schema cache/i.test(m)) return 'Falta correr la actualización de la base de datos (SQL) en Supabase. Avisa al administrador.';
@@ -522,8 +522,9 @@ function renderInv(){
       <td class="r"><input class="n num" data-f="restock" data-id="${p.id}" value="${esc(p.restock||0)}" inputmode="numeric" aria-label="Resurtido"></td>
       <td class="r num">${i.sold}</td><td class="r num">${i.held}</td>
       <td class="r num ${i.available<=3?'lowstock':''}">${i.available}</td>
-      <td><input type="checkbox" data-f="active" data-id="${p.id}" ${p.active!==false?'checked':''} aria-label="Visible en tienda"></td></tr>`;}).join('')
-      :`<tr><td colspan="13" class="empty">${S.staffLoaded?'Sin productos. Agrega el primero abajo.':'Cargando…'}</td></tr>`;
+      <td><input type="checkbox" data-f="active" data-id="${p.id}" ${p.active!==false?'checked':''} aria-label="Visible en tienda"></td>
+      <td><button type="button" class="linkbtn rm" data-pdel="${p.id}" style="display:inline;white-space:nowrap">${S.prodDelArm===p.id?'¿Seguro? Toca otra vez':'Eliminar'}</button></td></tr>`;}).join('')
+      :`<tr><td colspan="14" class="empty">${S.staffLoaded?'Sin productos. Agrega el primero abajo.':'Cargando…'}</td></tr>`;
   }
   const byC={}; for(const o of paid){ const k=o.consejera||'Sin consejera'; const r=byC[k]||(byC[k]={n:0,u:0,t:0}); r.n++; r.t+=netTotal(o); r.u+=netUnits(o); }
   const cr=Object.entries(byC).sort((a,b)=>b[1].t-a[1].t);
@@ -565,6 +566,16 @@ async function uploadImage(id, file){
     toast('Foto guardada'); queue('products');
   }catch(ex){ toast('No se pudo subir la foto. Revisa la conexión.'); }
 }
+$('invWrap').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-pdel]'); if(!b) return;
+  const id=b.dataset.pdel;
+  if(S.prodDelArm!==id){ S.prodDelArm=id; b.textContent='¿Seguro? Toca otra vez'; return; }
+  S.prodDelArm=null; b.disabled=true;
+  try{ const old=storagePath(S.products.find(p=>p.id===id)?.image_url);
+    await rpc('delete_product',{ p_id:id }); if(old) sb.storage.from(BUCKET).remove([old]);
+    toast('Producto eliminado'); queue('products','avail');
+  }catch(ex){ toast(errMsg(ex)); b.disabled=false; b.textContent='Eliminar'; }
+});
 const onImgClick=async e=>{
   const b=e.target.closest('[data-rmimg]'); if(!b) return; b.blur();
   const id=b.dataset.rmimg, old=storagePath(S.products.find(p=>p.id===id)?.image_url);
