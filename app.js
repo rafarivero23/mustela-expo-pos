@@ -480,7 +480,7 @@ function renderSurtido(){
   $('cntPaid').textContent=paid.length; $('cntReady').textContent=ready.length;
   const done=S.orders.filter(o=>o.status==='entregado').length; $('cntDone').textContent= done?`${done} pedidos entregados.`:'';
   const card=(o,mode)=>`<div class="ticket"><div class="th"><span class="c">${esc(o.number)}</span><span class="muted" style="font-size:14px">${mode==='paid'?'Pagado '+ago(o.paidAt):'Listo '+ago(o.readyAt)}</span></div>
-    <div><b>${esc(fullName(o.customer))}</b></div>
+    <div><b>${esc(fullName(o.customer))}</b>${o.consejera?`<br><span class="muted" style="font-size:14px">Dermo-Consejera: <b>${esc(o.consejera)}</b></span>`:''}</div>
     <ul>${(o.items||[]).map((i,ix)=>{const k=o.number+':'+ix; const rq=retInfo(o.number).qty[i.pid]||0, nq=i.qty-rq; if(nq<=0) return ''; return mode==='paid'?`<li><label><input type="checkbox" data-tick="${esc(k)}" ${S.ticks[k]?'checked':''}><span class="q num">${nq}×</span><span>${esc(i.name)} <span class="muted">${esc(i.size||'')}</span>${kitInc(i.comps,nq)}</span></label></li>`:`<li><span class="q num">${nq}×</span> ${esc(i.name)} <span class="muted">${esc(i.size||'')}</span>${kitInc(i.comps,nq)}</li>`;}).join('')}</ul>
     ${mode==='paid'?`<button class="btn primary" data-ready="${esc(o.number)}">Listo para entregar</button>`:`<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ok" data-deliver="${esc(o.number)}">Entregado</button><button class="btn ghost sm" data-back="${esc(o.number)}">Regresar a surtir</button></div>`}</div>`;
   $('colPaid').innerHTML=paid.length?paid.map(o=>card(o,'paid')).join(''):'<div class="panel empty">Nada por surtir.</div>';
