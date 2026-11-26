@@ -201,7 +201,8 @@ function render(){
       <td>${i.status==='confirmado'?`${esc(i.nombre)}<br><span class="muted" style="font-size:13px">${i.adultos} ad. · ${(i.ninos||[]).length} niños</span>`:''}</td>
       <td class="num">${s?tm(s.starts_at):(i.status==='confirmado'?'Espera':'')}</td>
       <td style="white-space:nowrap"><button class="btn sm" data-copy="${url}">Copiar</button>
-        <a class="btn sm wa" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(msg+'\n'+url)}">WhatsApp</a></td></tr>`; }).join('');
+        <a class="btn sm wa" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(msg+'\n'+url)}">WhatsApp</a>
+        ${i.status!=='pendiente'||i.opened_at?`<button class="btn sm danger" data-reset="${i.code}" data-num="${i.num}">Borrar respuesta</button>`:''}</td></tr>`; }).join('');
 
   // Ajustes: capacity list
   $('cap').innerHTML = S.slots.map(s=>`<div class="ag" style="grid-template-columns:92px 1fr auto"><div class="t num">${tm(s.starts_at)}</div><div class="muted">${s.minutes} min · ${conf.filter(i=>i.slot_id===s.id).length} reservadas</div>
@@ -215,6 +216,9 @@ document.addEventListener('click', async e=>{
   if (t) { S.tab=t.dataset.tab; document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-current',String(b===t))); ['agenda','inv','cfg'].forEach(x=>$('t-'+x).hidden=x!==S.tab); if (S.tab==='cfg') fillCfg(); return; }
   const c = e.target.closest('[data-copy]');
   if (c) { try { await navigator.clipboard.writeText(c.dataset.copy); toast('Liga copiada'); } catch { prompt('Copia la liga:', c.dataset.copy); } return; }
+  const r = e.target.closest('[data-reset]');
+  if (r) { if (!confirm(`¿Borrar la respuesta de la invitación #${r.dataset.num}? Vuelve a "Pendiente" y libera su horario. La liga sigue siendo la misma.`)) return;
+    try { await rpc('ses_admin_reset', { p_code:r.dataset.reset }); toast('Respuesta borrada'); await loadAll(); } catch (ex) { toast(errMsg(ex)); } return; }
   const k = e.target.closest('[data-ck]');
   if (k) { try { await rpc('ses_admin_set', { p_code:k.dataset.ck, p_checkin:k.dataset.v==='1' }); toast(k.dataset.v==='1'?'Llegada registrada':'Llegada deshecha'); await loadAll(); } catch (ex) { toast(errMsg(ex)); } }
 });
