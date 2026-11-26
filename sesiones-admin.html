@@ -119,6 +119,19 @@ tr:last-child td{border-bottom:0}
         <label style="display:flex;gap:10px;align-items:center;font-weight:600"><input type="checkbox" id="c-open" style="width:22px;height:22px;min-height:0"> Las ligas aceptan respuestas y cambios</label>
         <button class="btn primary">Guardar</button>
       </form>
+      <form id="genForm" class="panel section" style="max-width:640px" novalidate>
+        <h2>Generar <b>horarios</b></h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px">
+          <label class="f">Día<input type="date" id="g-day"></label>
+          <label class="f">Inicio<input type="time" id="g-start" step="300"></label>
+          <label class="f">Fin<input type="time" id="g-end" step="300"></label>
+          <label class="f">Minutos por sesión<input type="number" id="g-min" min="5" max="240" step="5"></label>
+          <label class="f">Familias por horario<input type="number" id="g-cap" min="1" max="20"></label>
+        </div>
+        <p class="muted" id="g-prev"></p>
+        <p class="banner warn" id="g-warn" hidden></p>
+        <button class="btn primary">Generar horarios</button>
+      </form>
       <div class="section"><h2>Horarios</h2><p class="muted">Cupo = familias por horario. Pon 0 para bloquear un horario (p. ej. comida del fotógrafo).</p><div id="cap" class="agenda"></div></div>
     </section>
   </main>
@@ -137,7 +150,7 @@ const tm = iso => new Date(iso).toLocaleTimeString('es-MX',{timeZone:TZ,hour:'nu
 const dt = iso => new Date(iso).toLocaleDateString('es-MX',{timeZone:TZ,weekday:'long',day:'numeric',month:'long',year:'numeric'});
 const BASE = location.origin + '/sesiones?c=';
 let toastT; const toast = m => { const t=$('toast'); t.textContent=m; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,3000); };
-const ERR = { horario_ocupado:'Ese horario ya está ocupado.', no_autorizado:'Tu usuario no tiene acceso de personal.', invitacion_no_existe:'Ese código no existe.' };
+const ERR = { horario_ocupado:'Ese horario ya está ocupado.', horario_invalido:'Revisa inicio, fin y duración.', cantidad_invalida:'Revisa los números.', no_autorizado:'Tu usuario no tiene acceso de personal.', invitacion_no_existe:'Ese código no existe.' };
 const errMsg = e => { const m=String(e?.message||e); for (const k in ERR) if (m.includes(k)) return ERR[k]; if (/Could not find the function|does not exist|schema cache/i.test(m)) return 'Falta correr 014_sesiones.sql en Supabase.'; return 'No se pudo guardar: '+m.slice(0,90); };
 const rpc = async (fn, args) => { const { data, error } = await sb.rpc(fn, args); if (error) throw error; return data; };
 const S = { ev:null, slots:[], inv:[], tab:'agenda' };
@@ -209,7 +222,30 @@ function render(){
     <label style="display:flex;gap:8px;align-items:center">Cupo <input class="sm" style="width:70px" type="number" min="0" max="20" value="${s.capacity}" data-cap="${s.id}"></label></div>`).join('');
 }
 
-function fillCfg(){ const e=S.ev||{}; $('c-nombre').value=e.nombre||''; $('c-lugar').value=e.lugar||''; $('c-dir').value=e.direccion||''; $('c-msg').value=e.mensaje||''; $('c-open').checked=!!e.abierto; }
+const hm = iso => new Date(iso).toLocaleTimeString('en-GB',{timeZone:TZ,hour:'2-digit',minute:'2-digit'});
+const toIso = (d,t) => `${d}T${t}:00-06:00`;   // CDMX, no DST
+function genPlan(){
+  const d=$('g-day').value, a=$('g-start').value, b=$('g-end').value, m=+$('g-min').value, c=+$('g-cap').value;
+  if(!d||!a||!b||!(m>=5)||!(c>=1)) return null;
+  const st=Date.parse(toIso(d,a)), en=Date.parse(toIso(d,b)); const times=[];
+  for(let t=st; t+m*60000<=en; t+=m*60000) times.push(t);
+  return { d,a,b,m,c,times };
+}
+function genPreview(){
+  const p=genPlan(); if(!p||!p.times.length){ $('g-prev').textContent='Revisa los datos.'; $('g-warn').hidden=true; return; }
+  const last=p.times[p.times.length-1];
+  $('g-prev').textContent=`${p.times.length} horarios de ${p.m} min (${hm(p.times[0])}–${hm(last)}) · ${p.times.length*p.c} familias en total para ${S.inv.length} invitaciones.`;
+  const keep=new Set(p.times); const moved=S.inv.filter(i=>i.status==='confirmado'&&i.slot_id&&!keep.has(Date.parse(S.slots.find(s=>s.id===i.slot_id)?.starts_at)));
+  $('g-warn').textContent=moved.length?`${moved.length} familia(s) con horario que ya no existe pasarán a lista de espera: ${moved.map(i=>i.nombre).join(', ')}.`:''; $('g-warn').hidden=!moved.length;
+}
+function fillGen(){ const f=S.slots[0], l=S.slots[S.slots.length-1]; if(!f) return;
+  $('g-day').value=new Date(f.starts_at).toLocaleDateString('en-CA',{timeZone:TZ}); $('g-start').value=hm(f.starts_at);
+  $('g-end').value=hm(new Date(Date.parse(l.starts_at)+l.minutes*60000).toISOString()); $('g-min').value=f.minutes; $('g-cap').value=Math.max(1,f.capacity); genPreview(); }
+$('genForm').oninput=genPreview;
+$('genForm').onsubmit=async e=>{ e.preventDefault(); const p=genPlan(); if(!p||!p.times.length) return toast('Revisa los datos');
+  if(!confirm(`¿Generar ${p.times.length} horarios de ${p.m} min, ${p.c} familia(s) cada uno?${$('g-warn').hidden?'':'\n\n'+$('g-warn').textContent}`)) return;
+  try{ await rpc('ses_regen_slots',{ p_start:toIso(p.d,p.a), p_end:toIso(p.d,p.b), p_minutes:p.m, p_capacity:p.c }); toast('Horarios actualizados'); await loadAll(); fillGen(); }catch(ex){ toast(errMsg(ex)); } };
+function fillCfg(){ fillGen(); const e=S.ev||{}; $('c-nombre').value=e.nombre||''; $('c-lugar').value=e.lugar||''; $('c-dir').value=e.direccion||''; $('c-msg').value=e.mensaje||''; $('c-open').checked=!!e.abierto; }
 
 document.addEventListener('click', async e=>{
   const t = e.target.closest('[data-tab]');
