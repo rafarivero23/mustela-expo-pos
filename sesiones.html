@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mustela Sessions · Confirma tu asistencia</title>
+<meta name="robots" content="noindex">
+<meta property="og:title" content="Mustela Sessions">
+<meta property="og:description" content="Confirma tu asistencia y elige el horario de tus fotos.">
+<style>
+@font-face{font-family:"Taviraj";font-weight:300;font-display:swap;src:url(fonts/taviraj-latin-300-normal.woff2) format("woff2")}
+@font-face{font-family:"Work Sans";font-weight:400;font-display:swap;src:url(fonts/work-sans-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:"Work Sans";font-weight:600;font-display:swap;src:url(fonts/work-sans-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:"Work Sans";font-weight:700;font-display:swap;src:url(fonts/work-sans-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:"Work Sans";font-weight:800;font-display:swap;src:url(fonts/work-sans-latin-800-normal.woff2) format("woff2")}
+:root{
+  --bleu:#004D9D; --ink:#004D9D; --muted:#4F6C93; --line:#C8D8EC; --soft:#E1F3FA; --blush:#F1D9CD;
+  --ok:#3D6944; --ok-soft:#D0DEBB; --bad:#B23A33; --bad-soft:#FBE2E0; --warn:#7A5300; --warn-soft:#FFF3B7;
+  --display:"Taviraj", Georgia, serif; --body:"Work Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:#fff;color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45;-webkit-tap-highlight-color:transparent}
+main{max-width:560px;margin:0 auto;padding:calc(20px + env(safe-area-inset-top,0px)) max(18px,env(safe-area-inset-right,0px)) 48px max(18px,env(safe-area-inset-left,0px));display:grid;gap:22px}
+h1,h2{margin:0;font-family:var(--display);font-weight:300;line-height:1.1;text-wrap:balance}
+h1{font-size:clamp(34px,9vw,46px)} h2{font-size:24px}
+h1 b,h2 b{font-family:var(--body);font-weight:800;letter-spacing:-.02em}
+p{margin:0}
+.muted{color:var(--muted)}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.logo{font-weight:800;font-size:24px;letter-spacing:-.02em}
+.logo img{height:30px;width:auto;display:block}
+.hero{background:var(--soft);border-radius:20px;padding:22px;display:grid;gap:12px}
+.facts{display:grid;gap:8px;font-size:15px}
+.facts div{display:flex;gap:10px;align-items:flex-start}
+.facts b{font-weight:700}
+.facts svg{flex:none;margin-top:2px}
+a{color:var(--bleu);font-weight:600}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--bleu);outline-offset:2px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;padding:0 24px;border-radius:999px;font-weight:700;background:var(--soft);color:var(--ink);border:2px solid transparent;text-decoration:none}
+.btn.primary{background:var(--bleu);color:#fff}
+.btn.ghost{background:transparent;border-color:var(--bleu)}
+.btn.block{width:100%}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.choice{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.choice button{min-height:64px;border-radius:16px;border:2px solid var(--line);font-weight:700;font-size:17px;background:#fff}
+.choice button[aria-pressed="true"]{background:var(--bleu);border-color:var(--bleu);color:#fff}
+label.f{display:grid;gap:6px;font-weight:600;font-size:15px}
+input,select,textarea{font:inherit;color:var(--ink);background:#fff;border:1.5px solid var(--line);border-radius:12px;min-height:52px;padding:0 14px;width:100%}
+textarea{padding:12px 14px;min-height:80px;resize:vertical}
+input[type=checkbox]{width:24px;height:24px;min-height:0;accent-color:var(--bleu);flex:none;margin:0}
+.check{display:flex;gap:12px;align-items:flex-start;font-size:15px;cursor:pointer}
+.card{border:1px solid var(--line);border-radius:18px;padding:18px;display:grid;gap:16px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.stepper{display:flex;align-items:center;gap:4px;background:var(--soft);border-radius:999px;padding:4px}
+.stepper button{width:44px;height:44px;border-radius:999px;font-size:22px;font-weight:700;background:#fff;border:1px solid var(--line)}
+.stepper span{min-width:30px;text-align:center;font-weight:800;font-size:18px}
+.kids{display:grid;gap:10px}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
+.slot{min-height:56px;border-radius:14px;border:2px solid var(--line);background:#fff;font-weight:700;font-size:17px;display:grid;place-items:center;line-height:1.1;padding:6px}
+.slot small{font-size:11px;font-weight:600;color:var(--muted)}
+.slot[aria-pressed="true"]{background:var(--bleu);border-color:var(--bleu);color:#fff}
+.slot[aria-pressed="true"] small{color:#fff}
+.slot[disabled]{background:#F4F6FA;color:#A5B4C8;border-style:dashed;cursor:not-allowed;text-decoration:line-through}
+.banner{border-radius:12px;padding:12px 16px;font-weight:600;font-size:15px}
+.banner.bad{background:var(--bad-soft);color:var(--bad)} .banner.warn{background:var(--warn-soft);color:var(--warn)} .banner.ok{background:var(--ok-soft);color:var(--ok)}
+.done{text-align:center;display:grid;gap:14px;justify-items:center}
+.big{font-weight:800;font-size:clamp(44px,13vw,64px);line-height:1;letter-spacing:.01em}
+.code{font-weight:800;font-size:28px;letter-spacing:.18em;background:var(--blush);border-radius:12px;padding:6px 16px}
+.sum{display:grid;gap:6px;text-align:left;width:100%;background:var(--soft);border-radius:16px;padding:16px;font-size:15px}
+.foot{font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<main>
+  <div class="logo logo-slot" aria-label="Mustela">Mustela</div>
+
+  <div id="loading" class="muted">Cargando tu invitación…</div>
+  <div id="fatal" class="banner bad" hidden></div>
+
+  <section id="hero" class="hero" hidden>
+    <p class="eyebrow">Estás invitado</p>
+    <h1 id="evName">Mustela <b>Sessions</b></h1>
+    <p id="evMsg" class="muted" hidden></p>
+    <div class="facts">
+      <div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg><span id="evDate"></span></div>
+      <div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><span><b id="evPlace"></b><br><span id="evAddr" class="muted"></span><br><a id="evMap" target="_blank" rel="noopener">Ver en mapa</a></span></div>
+      <div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="4"/><path d="M4 7h3l2-3h6l2 3h3v13H4z"/></svg><span>Sesión de fotos de 25 minutos para tu familia. Elige tu horario.</span></div>
+    </div>
+  </section>
+
+  <!-- Already answered -->
+  <section id="summary" class="card" hidden></section>
+
+  <!-- Form -->
+  <form id="form" class="card" novalidate hidden>
+    <div><h2>¿Nos <b>acompañas</b>?</h2></div>
+    <div class="choice">
+      <button type="button" data-att="1" aria-pressed="false">Sí, ahí estaremos</button>
+      <button type="button" data-att="0" aria-pressed="false">No podré ir</button>
+    </div>
+
+    <div id="yes" hidden style="display:grid;gap:16px">
+      <label class="f">Nombre de quien asiste<input id="f-name" autocomplete="name" maxlength="80" placeholder="Nombre y apellido"></label>
+      <label class="f">Celular (WhatsApp)<input id="f-tel" type="tel" inputmode="tel" autocomplete="tel" placeholder="10 dígitos"></label>
+
+      <div class="row"><div><b>Adultos</b><div class="muted" style="font-size:14px">Contándote a ti</div></div>
+        <div class="stepper"><button type="button" data-st="ad" data-d="-1" aria-label="Menos adultos">−</button><span id="adN">1</span><button type="button" data-st="ad" data-d="1" aria-label="Más adultos">+</button></div></div>
+
+      <div class="row"><div><b>Niños y bebés</b><div class="muted" style="font-size:14px">Incluye a tu bebé en camino</div></div>
+        <div class="stepper"><button type="button" data-st="ki" data-d="-1" aria-label="Menos niños">−</button><span id="kiN">0</span><button type="button" data-st="ki" data-d="1" aria-label="Más niños">+</button></div></div>
+      <div id="kids" class="kids"></div>
+
+      <div style="display:grid;gap:10px">
+        <div><b>Horario de tus fotos</b><div class="muted" style="font-size:14px">Una familia por horario · 25 min</div></div>
+        <div id="slots" class="slots"></div>
+        <p id="noSlots" class="banner warn" hidden>Por ahora todos los horarios están ocupados. Confirma y te anotamos en lista de espera; te escribimos por WhatsApp si se libera uno.</p>
+      </div>
+
+      <label class="f">Comentarios (opcional)<textarea id="f-com" maxlength="300" placeholder="Algo que debamos saber"></textarea></label>
+      <label class="check" id="privWrap" hidden><input type="checkbox" id="f-priv"><span>Acepto el <a id="privLink" target="_blank" rel="noopener">aviso de privacidad</a>.</span></label>
+    </div>
+
+    <p id="err" class="banner bad" hidden></p>
+    <button class="btn primary block" id="send" disabled>Enviar respuesta</button>
+    <button type="button" class="btn ghost block" id="cancelEdit" hidden>Cancelar</button>
+  </form>
+
+  <p class="foot muted">Esta liga es personal. Si cambian tus planes, ábrela de nuevo para modificar tu respuesta.</p>
+</main>
+
+<script src="config.js"></script>
+<script type="module">
+import { createClient } from './vendor/supabase-2.117.2.js';
+const CFG = window.MUSTELA_CONFIG || {};
+const sb = createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:false } });
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const TZ = 'America/Mexico_City';
+const tm = iso => new Date(iso).toLocaleTimeString('es-MX',{timeZone:TZ,hour:'numeric',minute:'2-digit',hour12:true}).replace(/\s?a\.?\s?m\.?/i,' am').replace(/\s?p\.?\s?m\.?/i,' pm');
+const dt = iso => { const s=new Date(iso).toLocaleDateString('es-MX',{timeZone:TZ,weekday:'long',day:'numeric',month:'long'}); return s.charAt(0).toUpperCase()+s.slice(1); };
+const AGES = ['Embarazo (bebé en camino)','0–6 meses','6–12 meses','1 año','2 años','3 años','4 años','5 años','6 años','7 años','8 años','9 años','10 años','11 años','12 años o más'];
+const ERR = { invitacion_no_existe:'Esta liga no es válida. Revisa que la hayas copiado completa.', registro_cerrado:'El registro ya está cerrado. Escríbenos por WhatsApp si necesitas un cambio.',
+  ya_registrado:'Tu llegada ya quedó registrada.', nombre_requerido:'Escribe tu nombre.', telefono_invalido:'Escribe tu celular a 10 dígitos.',
+  adultos_invalido:'Indica cuántos adultos asisten (máximo 6).', ninos_invalido:'Máximo 8 niños por invitación.', ninos_edad:'Elige la edad de cada niño.',
+  horario_ocupado:'Alguien acaba de tomar ese horario. Elige otro.', horario_no_existe:'Ese horario ya no está disponible. Elige otro.' };
+const errMsg = e => { const m=String(e?.message||e||''); for(const k in ERR) if(m.includes(k)) return ERR[k]; if(/fetch|network|Failed/i.test(m)) return 'Sin conexión. Revisa tu internet e intenta de nuevo.'; return 'No se pudo guardar. Intenta de nuevo.'; };
+
+const code = (new URLSearchParams(location.search).get('c') || location.hash.slice(1) || '').toUpperCase().replace(/[^A-Z0-9]/g,'');
+const F = { att:null, ad:1, kids:[], slot:null };
+let D = null;
+
+async function load(){
+  const { data, error } = await sb.rpc('ses_get', { p_code: code });
+  if (error) throw error;
+  D = data;
+}
+const slotById = id => D.slots.find(s=>s.id===id);
+
+function renderHero(){
+  const e = D.event, first = D.slots[0], last = D.slots[D.slots.length-1];
+  $('evName').innerHTML = esc(e.nombre).replace(/^Mustela\s+/i,'Mustela <b>')+(/^Mustela\s+/i.test(e.nombre)?'</b>':'');
+  if (first) $('evDate').innerHTML = `<b>${esc(dt(first.starts_at))}</b><br><span class="muted">${tm(first.starts_at)} a ${tm(new Date(new Date(last.starts_at).getTime()+last.minutes*60000).toISOString())}</span>`;
+  $('evPlace').textContent = e.lugar; $('evAddr').textContent = e.direccion;
+  $('evMap').href = e.maps_url || ('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(e.direccion));
+  $('evMsg').textContent = e.mensaje||''; $('evMsg').hidden = !e.mensaje;
+  $('hero').hidden = false;
+}
+
+function renderSummary(){
+  const i = D.invite, s = i.slot_id && slotById(i.slot_id);
+  const el = $('summary');
+  if (i.status === 'pendiente') { el.hidden = true; return; }
+  const canEdit = D.event.abierto && !i.checked_in;
+  if (i.status === 'no_asiste') {
+    el.innerHTML = `<div class="done"><h2>Gracias por <b>avisarnos</b></h2><p class="muted">Registramos que no podrás asistir. Te vamos a extrañar.</p>
+      ${canEdit?'<button type="button" class="btn ghost" id="edit">Cambiar mi respuesta</button>':''}</div>`;
+  } else {
+    const kids = (i.ninos||[]);
+    el.innerHTML = `<div class="done">
+      <p class="eyebrow">${i.checked_in?'Llegada registrada':'Asistencia confirmada'}</p>
+      ${s ? `<div class="big">${tm(s.starts_at)}</div><p class="muted">Tu sesión de fotos · ${esc(dt(s.starts_at))}</p>`
+          : `<h2>Estás en <b>lista de espera</b></h2><p class="muted">Te escribimos por WhatsApp en cuanto se libere un horario.</p>`}
+      <div class="sum">
+        <div><b>${esc(i.nombre)}</b></div>
+        <div>${i.adultos} ${i.adultos===1?'adulto':'adultos'}${kids.length?` · ${kids.length} ${kids.length===1?'niño':'niños'} (${esc(kids.join(', '))})`:''}</div>
+        <div class="muted">Te recomendamos llegar 10 minutos antes.</div>
+      </div>
+      <p class="muted" style="font-size:14px">Al llegar, muestra este código:</p><div class="code">${esc(i.code)}</div>
+      ${s?'<button type="button" class="btn" id="ics">Agregar a mi calendario</button>':''}
+      ${canEdit?'<button type="button" class="btn ghost" id="edit">Cambiar mi respuesta</button>':''}
+    </div>`;
+    if (s) $('ics').onclick = () => downloadIcs(s);
+  }
+  el.hidden = false;
+  const ed = $('edit'); if (ed) ed.onclick = () => openForm(true);
+}
+
+function downloadIcs(s){
+  const f = d => new Date(d).toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
+  const end = new Date(new Date(s.starts_at).getTime()+s.minutes*60000);
+  const e = D.event, x = t => String(t).replace(/[,;\\]/g,m=>'\\'+m);
+  const ics = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Mustela//Sessions//ES','BEGIN:VEVENT',
+    `UID:${D.invite.code}@mustela-sessions`,`DTSTAMP:${f(Date.now())}`,`DTSTART:${f(s.starts_at)}`,`DTEND:${f(end)}`,
+    `SUMMARY:${x(e.nombre)} · sesión de fotos`,`LOCATION:${x(e.lugar+', '+e.direccion)}`,
+    `DESCRIPTION:Código de llegada: ${D.invite.code}`,'BEGIN:VALARM','TRIGGER:-PT2H','ACTION:DISPLAY','DESCRIPTION:Mustela Sessions','END:VALARM','END:VEVENT','END:VCALENDAR'].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([ics],{type:'text/calendar'})); a.download = 'mustela-sessions.ics';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+function openForm(editing){
+  const i = D.invite;
+  F.att = editing ? (i.status==='confirmado') : null;
+  F.ad = i.adultos || 1; F.kids = [...(i.ninos||[])]; F.slot = i.slot_id || null;
+  $('f-name').value = i.nombre||''; $('f-tel').value = i.telefono||''; $('f-com').value = '';
+  if (D.privacy_url) { $('privWrap').hidden=false; $('privLink').href=D.privacy_url; $('f-priv').checked=!!editing; }
+  $('cancelEdit').hidden = !editing;
+  $('summary').hidden = true; $('form').hidden = false; $('err').hidden = true;
+  renderForm();
+  if (editing) $('form').scrollIntoView({behavior:'smooth'});
+}
+
+function renderForm(){
+  document.querySelectorAll('[data-att]').forEach(b=>b.setAttribute('aria-pressed', String(F.att!==null && (b.dataset.att==='1')===F.att)));
+  $('yes').hidden = F.att !== true;
+  $('adN').textContent = F.ad; $('kiN').textContent = F.kids.length;
+  $('kids').innerHTML = F.kids.map((k,n)=>`<label class="f">Edad del niño ${n+1}<select data-kid="${n}"><option value="">Elige…</option>${AGES.map(a=>`<option${a===k?' selected':''}>${a}</option>`).join('')}</select></label>`).join('');
+  const free = D.slots.filter(s=>s.free>0);
+  if (F.slot && !free.some(s=>s.id===F.slot)) F.slot = null;
+  $('slots').innerHTML = D.slots.map(s=>`<button type="button" class="slot" data-slot="${s.id}" aria-pressed="${s.id===F.slot}" ${s.free>0?'':'disabled aria-label="'+tm(s.starts_at)+' ocupado"'}>${tm(s.starts_at)}${s.free>0?'':'<small>Ocupado</small>'}</button>`).join('');
+  $('noSlots').hidden = free.length > 0;
+  $('send').disabled = F.att === null;
+  $('send').textContent = F.att===false ? 'Enviar respuesta' : (F.slot ? `Confirmar · ${tm(slotById(F.slot).starts_at)}` : (free.length ? 'Elige un horario' : 'Confirmar (lista de espera)'));
+  if (F.att===true && !F.slot && free.length) $('send').disabled = true;
+}
+
+document.addEventListener('click', e=>{
+  const a = e.target.closest('[data-att]'); if (a) { F.att = a.dataset.att==='1'; renderForm(); return; }
+  const st = e.target.closest('[data-st]');
+  if (st) { const d = +st.dataset.d;
+    if (st.dataset.st==='ad') F.ad = Math.min(6, Math.max(1, F.ad+d));
+    else { if (d>0 && F.kids.length<8) F.kids.push(''); if (d<0) F.kids.pop(); }
+    renderForm(); return; }
+  const sl = e.target.closest('[data-slot]'); if (sl && !sl.disabled) { F.slot = +sl.dataset.slot; renderForm(); }
+});
+document.addEventListener('change', e=>{ const k = e.target.closest('[data-kid]'); if (k) F.kids[+k.dataset.kid] = k.value; });
+$('cancelEdit').onclick = () => { $('form').hidden = true; renderSummary(); };
+
+$('form').onsubmit = async e => {
+  e.preventDefault();
+  const err = m => { $('err').textContent = m; $('err').hidden = false; };
+  $('err').hidden = true;
+  if (F.att===true) {
+    if ($('f-name').value.trim().length < 2) return err(ERR.nombre_requerido);
+    if ($('f-tel').value.replace(/\D/g,'').replace(/^52(?=\d{10}$)/,'').length !== 10) return err(ERR.telefono_invalido);
+    if (F.kids.some(k=>!k)) return err(ERR.ninos_edad);
+    if (D.privacy_url && !$('f-priv').checked) return err('Para continuar acepta el aviso de privacidad.');
+  }
+  $('send').disabled = true;
+  try {
+    const { error } = await sb.rpc('ses_respond', { p_code: code, p_attend: F.att, p_nombre: $('f-name').value, p_telefono: $('f-tel').value,
+      p_adultos: F.ad, p_ninos: F.kids, p_slot: F.att ? F.slot : null, p_comentario: $('f-com').value });
+    if (error) throw error;
+    await load(); $('form').hidden = true; renderSummary(); window.scrollTo({top:0,behavior:'smooth'});
+  } catch (ex) {
+    err(errMsg(ex));
+    if (/horario_/.test(String(ex?.message))) { try { await load(); F.slot = null; renderForm(); } catch {} }
+  } finally { if (!$('form').hidden) $('send').disabled = false; renderForm(); }
+};
+
+(function(){ const img=new Image(); img.onload=()=>document.querySelectorAll('.logo-slot').forEach(el=>{ el.textContent=''; const i=img.cloneNode(); i.alt='Mustela'; el.appendChild(i); }); img.src='assets/logo.svg'; })();
+
+(async () => {
+  try {
+    if (!code) throw new Error('invitacion_no_existe');
+    await load();
+    $('loading').hidden = true; renderHero();
+    if (D.invite.status === 'pendiente') {
+      if (!D.event.abierto) { $('fatal').textContent = ERR.registro_cerrado; $('fatal').hidden = false; }
+      else openForm(false);
+    } else renderSummary();
+  } catch (ex) { $('loading').hidden = true; $('fatal').textContent = errMsg(ex); $('fatal').hidden = false; }
+})();
+</script>
+</body>
+</html>

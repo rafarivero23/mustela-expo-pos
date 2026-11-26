@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mustela Sessions · Admin</title>
+<meta name="robots" content="noindex">
+<style>
+@font-face{font-family:"Taviraj";font-weight:300;font-display:swap;src:url(fonts/taviraj-latin-300-normal.woff2) format("woff2")}
+@font-face{font-family:"Work Sans";font-weight:400;font-display:swap;src:url(fonts/work-sans-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:"Work Sans";font-weight:600;font-display:swap;src:url(fonts/work-sans-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:"Work Sans";font-weight:700;font-display:swap;src:url(fonts/work-sans-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:"Work Sans";font-weight:800;font-display:swap;src:url(fonts/work-sans-latin-800-normal.woff2) format("woff2")}
+:root{--bleu:#004D9D;--ink:#004D9D;--muted:#4F6C93;--line:#C8D8EC;--soft:#E1F3FA;--blush:#F1D9CD;--ok:#3D6944;--ok-soft:#D0DEBB;--bad:#B23A33;--bad-soft:#FBE2E0;--warn:#7A5300;--warn-soft:#FFF3B7;
+  --display:"Taviraj",Georgia,serif;--body:"Work Sans",system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:light}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;background:#fff;color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
+.wrap{max-width:1180px;margin:0 auto;padding:16px max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px))}
+h1,h2{margin:0;font-family:var(--display);font-weight:300;line-height:1.1}
+h1{font-size:clamp(28px,4vw,38px)}h2{font-size:24px}h1 b,h2 b{font-family:var(--body);font-weight:800;letter-spacing:-.02em}
+p{margin:0}.muted{color:var(--muted)}.num{font-variant-numeric:tabular-nums}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+a{color:var(--bleu)}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--bleu);outline-offset:2px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:0 18px;border-radius:999px;font-weight:700;background:var(--soft);color:var(--ink);border:2px solid transparent;text-decoration:none;white-space:nowrap}
+.btn.primary{background:var(--bleu);color:#fff}.btn.ok{background:var(--ok);color:#fff}.btn.ghost{background:transparent;border-color:var(--bleu)}.btn.danger{background:var(--bad-soft);color:var(--bad)}
+.btn.sm{min-height:34px;padding:0 12px;font-size:13px}
+.btn.wa{background:#1F9E55;color:#fff}
+input,select,textarea{font:inherit;color:var(--ink);background:#fff;border:1.5px solid var(--line);border-radius:10px;min-height:44px;padding:0 12px;width:100%}
+textarea{padding:10px 12px;resize:vertical}
+input.sm,select.sm{min-height:34px;padding:0 8px;font-size:14px}
+label.f{display:grid;gap:6px;font-weight:600}
+.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px}
+.logo{font-weight:800;font-size:22px;letter-spacing:-.02em}.logo img{height:28px;display:block}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tab{padding:8px 14px;border-radius:999px;font-weight:600;color:var(--muted);border:2px solid transparent}
+.tab[aria-current="true"]{border-color:var(--bleu);color:var(--bleu)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:16px 0 22px}
+.stat{background:var(--soft);border-radius:14px;padding:12px 14px}.stat b{display:block;font-size:28px;font-weight:800;line-height:1.1}
+.stat span{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.panel{border:1px solid var(--line);border-radius:16px;padding:18px;display:grid;gap:14px}
+.login{max-width:420px;margin:40px auto}
+.banner{border-radius:12px;padding:12px 16px;font-weight:600}
+.banner.bad{background:var(--bad-soft);color:var(--bad)}.banner.warn{background:var(--warn-soft);color:var(--warn)}
+.agenda{display:grid;gap:8px}
+.ag{display:grid;grid-template-columns:92px minmax(0,1fr) auto;gap:14px;align-items:center;border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.ag.free{background:#FAFCFE;border-style:dashed}
+.ag.blocked{opacity:.55}
+.ag.in{background:var(--ok-soft);border-color:var(--ok)}
+.ag .t{font-weight:800;font-size:20px}
+.ag .who b{font-size:16px}
+.ag .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+@media (max-width:680px){.ag{grid-template-columns:70px minmax(0,1fr)}.ag .acts{grid-column:1/-1;justify-content:flex-start}}
+.pill{display:inline-flex;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700}
+.p-pendiente{background:var(--warn-soft);color:var(--warn)}.p-confirmado{background:var(--ok-soft);color:var(--ok)}.p-no_asiste{background:var(--bad-soft);color:var(--bad)}.p-in{background:var(--ok);color:#fff}
+.tscroll{overflow:auto;border:1px solid var(--line);border-radius:14px}
+table{border-collapse:collapse;width:100%;min-width:860px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--soft)}
+tr:last-child td{border-bottom:0}
+.link{font-family:ui-monospace,Menlo,monospace;font-size:13px;word-break:break-all}
+.ckin{display:flex;gap:8px;max-width:420px}
+.ckin input{text-transform:uppercase;letter-spacing:.15em;font-weight:800;font-size:20px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;background:var(--ink);color:#fff;padding:12px 20px;border-radius:999px;font-weight:600;z-index:50}
+.section{margin-top:26px;display:grid;gap:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div style="display:flex;align-items:baseline;gap:12px"><span class="logo logo-slot">Mustela</span><span class="eyebrow">Sessions · Admin</span></div>
+    <nav class="tabs" id="tabs" hidden>
+      <button class="tab" data-tab="agenda" aria-current="true">Agenda y llegada</button>
+      <button class="tab" data-tab="inv">Invitaciones</button>
+      <button class="tab" data-tab="cfg">Ajustes</button>
+      <a class="tab" href="/">POS</a>
+    </nav>
+    <div id="who" hidden style="display:flex;gap:8px;align-items:center"><span class="muted" id="whoEmail"></span><button class="btn sm ghost" id="logout">Salir</button></div>
+  </header>
+
+  <form id="loginForm" class="panel login" hidden novalidate>
+    <h1>Inicia <b>sesión</b></h1><p class="muted">Usa tu usuario de personal Mustela.</p>
+    <label class="f">Correo<input id="l-email" type="email" autocomplete="username"></label>
+    <label class="f">Contraseña<input id="l-pass" type="password" autocomplete="current-password"></label>
+    <p id="loginErr" class="banner bad" hidden></p>
+    <button class="btn primary">Entrar</button>
+  </form>
+
+  <main id="app" hidden>
+    <h1 id="title">Mustela <b>Sessions</b></h1>
+    <p class="muted" id="subtitle"></p>
+    <div class="stats" id="stats"></div>
+
+    <section id="t-agenda">
+      <form id="ckForm" class="ckin" novalidate><input id="ckCode" maxlength="12" placeholder="CÓDIGO" autocomplete="off" aria-label="Código de llegada"><button class="btn primary">Registrar llegada</button></form>
+      <div class="section"><h2>Agenda de <b>fotos</b></h2><div id="agenda" class="agenda"></div></div>
+      <div class="section" id="waitWrap"><h2>Lista de <b>espera</b></h2><p class="muted">Confirmaron sin horario. Asígnales uno cuando se libere.</p><div id="wait" class="agenda"></div></div>
+    </section>
+
+    <section id="t-inv" hidden>
+      <div class="section" style="margin-top:0">
+        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:end">
+          <div><h2>Ligas <b>personales</b></h2><p class="muted">Una liga por familia. “Nota interna” es solo para el equipo (p. ej. a quién se la mandaste); el invitado no la ve.</p></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" id="copyAll">Copiar todas las ligas</button><button class="btn sm" id="csv">Descargar CSV</button><button class="btn sm ghost" id="addInv">+ Agregar invitaciones</button></div>
+        </div>
+        <label class="f">Mensaje para WhatsApp (la liga se agrega al final)<textarea id="waMsg" rows="4"></textarea></label>
+        <div class="tscroll"><table><thead><tr><th>#</th><th>Nota interna</th><th>Liga</th><th>Estado</th><th>Familia</th><th>Horario</th><th></th></tr></thead><tbody id="invBody"></tbody></table></div>
+      </div>
+    </section>
+
+    <section id="t-cfg" hidden>
+      <form id="cfgForm" class="panel" style="max-width:640px" novalidate>
+        <h2>Ajustes del <b>evento</b></h2>
+        <label class="f">Nombre<input id="c-nombre"></label>
+        <label class="f">Lugar<input id="c-lugar"></label>
+        <label class="f">Dirección<input id="c-dir"></label>
+        <label class="f">Mensaje en la invitación (opcional)<textarea id="c-msg" rows="3"></textarea></label>
+        <label style="display:flex;gap:10px;align-items:center;font-weight:600"><input type="checkbox" id="c-open" style="width:22px;height:22px;min-height:0"> Las ligas aceptan respuestas y cambios</label>
+        <button class="btn primary">Guardar</button>
+      </form>
+      <div class="section"><h2>Horarios</h2><p class="muted">Cupo = familias por horario. Pon 0 para bloquear un horario (p. ej. comida del fotógrafo).</p><div id="cap" class="agenda"></div></div>
+    </section>
+  </main>
+</div>
+<div id="toast" class="toast" hidden></div>
+
+<script src="config.js"></script>
+<script type="module">
+import { createClient } from './vendor/supabase-2.117.2.js';
+const CFG = window.MUSTELA_CONFIG || {};
+const sb = createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true, autoRefreshToken:true } });
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const TZ = 'America/Mexico_City';
+const tm = iso => new Date(iso).toLocaleTimeString('es-MX',{timeZone:TZ,hour:'numeric',minute:'2-digit',hour12:true}).replace(/\s?a\.?\s?m\.?/i,' am').replace(/\s?p\.?\s?m\.?/i,' pm');
+const dt = iso => new Date(iso).toLocaleDateString('es-MX',{timeZone:TZ,weekday:'long',day:'numeric',month:'long',year:'numeric'});
+const BASE = location.origin + '/sesiones?c=';
+let toastT; const toast = m => { const t=$('toast'); t.textContent=m; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,3000); };
+const ERR = { horario_ocupado:'Ese horario ya está ocupado.', no_autorizado:'Tu usuario no tiene acceso de personal.', invitacion_no_existe:'Ese código no existe.' };
+const errMsg = e => { const m=String(e?.message||e); for (const k in ERR) if (m.includes(k)) return ERR[k]; if (/Could not find the function|does not exist|schema cache/i.test(m)) return 'Falta correr 014_sesiones.sql en Supabase.'; return 'No se pudo guardar: '+m.slice(0,90); };
+const rpc = async (fn, args) => { const { data, error } = await sb.rpc(fn, args); if (error) throw error; return data; };
+const S = { ev:null, slots:[], inv:[], tab:'agenda' };
+const DEFAULT_MSG = '¡Hola! Te invitamos a Mustela Sessions, una sesión de fotos para tu familia. Confirma tu asistencia y elige tu horario aquí:';
+const kidsTxt = k => (k||[]).length ? `${k.length} ${k.length===1?'niño':'niños'} (${k.join(', ')})` : 'sin niños';
+const waPhone = t => t ? 'https://wa.me/52'+t : null;
+
+async function loadAll(){
+  const [e, s, i] = await Promise.all([
+    sb.from('ses_event').select('*').eq('id',1).maybeSingle(),
+    sb.from('ses_slots').select('*').order('starts_at'),
+    sb.from('ses_invites').select('*').order('num'),
+  ]);
+  if (e.error || s.error || i.error) throw (e.error||s.error||i.error);
+  S.ev = e.data; S.slots = s.data; S.inv = i.data;
+  render();
+}
+
+function render(){
+  const inv = S.inv, conf = inv.filter(i=>i.status==='confirmado');
+  const first = S.slots[0];
+  $('title').innerHTML = esc(S.ev?.nombre||'Mustela Sessions').replace(/^Mustela\s+(.*)$/i,'Mustela <b>$1</b>');
+  $('subtitle').textContent = [first?dt(first.starts_at):'', S.ev?.lugar].filter(Boolean).join(' · ') + (S.ev && !S.ev.abierto ? ' · REGISTRO CERRADO' : '');
+  const totalCap = S.slots.reduce((a,s)=>a+s.capacity,0), booked = conf.filter(i=>i.slot_id).length;
+  const st = [['Invitaciones',inv.length],['Abiertas',inv.filter(i=>i.opened_at).length],['Confirmadas',conf.length],['No asisten',inv.filter(i=>i.status==='no_asiste').length],
+    ['Pendientes',inv.filter(i=>i.status==='pendiente').length],['Adultos',conf.reduce((a,i)=>a+i.adultos,0)],['Niños',conf.reduce((a,i)=>a+(i.ninos||[]).length,0)],
+    ['Horarios libres',Math.max(0,totalCap-booked)+' / '+totalCap],['Llegaron',inv.filter(i=>i.checked_in_at).length]];
+  $('stats').innerHTML = st.map(([k,v])=>`<div class="stat"><b class="num">${v}</b><span>${k}</span></div>`).join('');
+
+  // Agenda
+  const freeOpts = (cur) => S.slots.filter(s=>s.capacity>conf.filter(i=>i.slot_id===s.id).length || s.id===cur).map(s=>`<option value="${s.id}"${s.id===cur?' selected':''}>${tm(s.starts_at)}</option>`).join('');
+  const famRow = (i, t) => `<div class="ag${i.checked_in_at?' in':''}">
+      <div class="t num">${t}</div>
+      <div class="who"><b>${esc(i.nombre)}</b> ${i.checked_in_at?'<span class="pill p-in">Llegó '+tm(i.checked_in_at)+'</span>':''}<br>
+        <span class="muted">${i.adultos} ${i.adultos===1?'adulto':'adultos'} · ${esc(kidsTxt(i.ninos))}</span><br>
+        <span class="muted">#${i.num} · <b>${i.code}</b>${i.telefono?` · <a href="${waPhone(i.telefono)}" target="_blank" rel="noopener">${i.telefono}</a>`:''}${i.nota?' · '+esc(i.nota):''}</span>
+        ${i.comentario?`<br><span class="muted">“${esc(i.comentario)}”</span>`:''}</div>
+      <div class="acts">
+        ${i.checked_in_at?`<button class="btn sm ghost" data-ck="${i.code}" data-v="0">Deshacer llegada</button>`:`<button class="btn sm ok" data-ck="${i.code}" data-v="1">Llegó</button>`}
+        <select class="sm" data-move="${i.code}" style="width:auto" aria-label="Mover horario"><option value="">${i.slot_id?'Mover…':'Asignar…'}</option>${freeOpts(i.slot_id)}${i.slot_id?'<option value="wait">→ Lista de espera</option>':''}</select>
+      </div></div>`;
+  $('agenda').innerHTML = S.slots.map(s=>{
+    const fams = conf.filter(i=>i.slot_id===s.id);
+    if (s.capacity===0 && !fams.length) return `<div class="ag blocked"><div class="t num">${tm(s.starts_at)}</div><div class="muted">Bloqueado</div></div>`;
+    const rows = fams.map(i=>famRow(i, tm(s.starts_at))).join('');
+    const free = s.capacity - fams.length;
+    return rows + (free>0 ? `<div class="ag free"><div class="t num">${tm(s.starts_at)}</div><div class="muted">Libre${s.capacity>1?` (${free} de ${s.capacity})`:''}</div></div>` : '');
+  }).join('');
+  const wait = conf.filter(i=>!i.slot_id);
+  $('waitWrap').hidden = !wait.length;
+  $('wait').innerHTML = wait.map(i=>famRow(i,'—')).join('');
+
+  // Invitaciones
+  const stTxt = { pendiente:'Pendiente', confirmado:'Confirmada', no_asiste:'No asiste' };
+  const msg = $('waMsg').value || DEFAULT_MSG;
+  $('invBody').innerHTML = inv.map(i=>{ const s=S.slots.find(x=>x.id===i.slot_id); const url=BASE+i.code;
+    return `<tr><td class="num">${i.num}</td>
+      <td><input class="sm" data-nota="${i.code}" value="${esc(i.nota)}" placeholder="—" maxlength="120"></td>
+      <td class="link">${esc(url)}</td>
+      <td><span class="pill p-${i.status}">${stTxt[i.status]}</span>${i.status==='pendiente'?`<br><span class="muted" style="font-size:12px">${i.opened_at?'Abrió la liga':'No la ha abierto'}</span>`:''}</td>
+      <td>${i.status==='confirmado'?`${esc(i.nombre)}<br><span class="muted" style="font-size:13px">${i.adultos} ad. · ${(i.ninos||[]).length} niños</span>`:''}</td>
+      <td class="num">${s?tm(s.starts_at):(i.status==='confirmado'?'Espera':'')}</td>
+      <td style="white-space:nowrap"><button class="btn sm" data-copy="${url}">Copiar</button>
+        <a class="btn sm wa" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(msg+'\n'+url)}">WhatsApp</a></td></tr>`; }).join('');
+
+  // Ajustes: capacity list
+  $('cap').innerHTML = S.slots.map(s=>`<div class="ag" style="grid-template-columns:92px 1fr auto"><div class="t num">${tm(s.starts_at)}</div><div class="muted">${s.minutes} min · ${conf.filter(i=>i.slot_id===s.id).length} reservadas</div>
+    <label style="display:flex;gap:8px;align-items:center">Cupo <input class="sm" style="width:70px" type="number" min="0" max="20" value="${s.capacity}" data-cap="${s.id}"></label></div>`).join('');
+}
+
+function fillCfg(){ const e=S.ev||{}; $('c-nombre').value=e.nombre||''; $('c-lugar').value=e.lugar||''; $('c-dir').value=e.direccion||''; $('c-msg').value=e.mensaje||''; $('c-open').checked=!!e.abierto; }
+
+document.addEventListener('click', async e=>{
+  const t = e.target.closest('[data-tab]');
+  if (t) { S.tab=t.dataset.tab; document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-current',String(b===t))); ['agenda','inv','cfg'].forEach(x=>$('t-'+x).hidden=x!==S.tab); if (S.tab==='cfg') fillCfg(); return; }
+  const c = e.target.closest('[data-copy]');
+  if (c) { try { await navigator.clipboard.writeText(c.dataset.copy); toast('Liga copiada'); } catch { prompt('Copia la liga:', c.dataset.copy); } return; }
+  const k = e.target.closest('[data-ck]');
+  if (k) { try { await rpc('ses_admin_set', { p_code:k.dataset.ck, p_checkin:k.dataset.v==='1' }); toast(k.dataset.v==='1'?'Llegada registrada':'Llegada deshecha'); await loadAll(); } catch (ex) { toast(errMsg(ex)); } }
+});
+document.addEventListener('change', async e=>{
+  const m = e.target.closest('[data-move]');
+  if (m && m.value) { try { await rpc('ses_admin_set', m.value==='wait' ? { p_code:m.dataset.move, p_clear_slot:true } : { p_code:m.dataset.move, p_slot:+m.value }); toast('Horario actualizado'); } catch (ex) { toast(errMsg(ex)); } await loadAll(); return; }
+  const n = e.target.closest('[data-nota]');
+  if (n) { try { await rpc('ses_admin_set', { p_code:n.dataset.nota, p_nota:n.value }); toast('Nota guardada'); } catch (ex) { toast(errMsg(ex)); } return; }
+  const cp = e.target.closest('[data-cap]');
+  if (cp) { try { await rpc('ses_set_slot_capacity', { p_slot:+cp.dataset.cap, p_capacity:+cp.value }); toast('Cupo guardado'); await loadAll(); } catch (ex) { toast(errMsg(ex)); } }
+});
+
+$('ckForm').onsubmit = async e => {
+  e.preventDefault();
+  const code = $('ckCode').value.trim().toUpperCase(); const i = S.inv.find(x=>x.code===code);
+  if (!i) return toast('Ese código no existe');
+  if (i.status!=='confirmado') return toast(`Invitación #${i.num}: no confirmó asistencia`);
+  try { await rpc('ses_admin_set', { p_code:code, p_checkin:true }); $('ckCode').value=''; const s=S.slots.find(x=>x.id===i.slot_id);
+    toast(`${i.nombre} · ${s?'fotos '+tm(s.starts_at):'lista de espera'}`); await loadAll(); } catch (ex) { toast(errMsg(ex)); }
+};
+$('waMsg').value = DEFAULT_MSG;
+$('waMsg').oninput = () => render();
+$('copyAll').onclick = async () => { const txt = S.inv.map(i=>`${i.num}${i.nota?' ('+i.nota+')':''}: ${BASE+i.code}`).join('\n'); try { await navigator.clipboard.writeText(txt); toast('Ligas copiadas'); } catch { prompt('Copia:', txt); } };
+$('addInv').onclick = async () => { const n = parseInt(prompt('¿Cuántas invitaciones nuevas?', '1'),10); if (!n) return; try { await rpc('ses_add_invites',{ p_n:n }); toast(`${n} invitaciones agregadas`); await loadAll(); } catch (ex) { toast(errMsg(ex)); } };
+$('csv').onclick = () => {
+  const rows = [['#','Nota interna','Liga','Código','Estado','Nombre','Celular','Adultos','Niños','Edades','Horario','Comentario','Llegó']].concat(S.inv.map(i=>{ const s=S.slots.find(x=>x.id===i.slot_id);
+    return [i.num,i.nota,BASE+i.code,i.code,i.status,i.nombre,i.telefono,i.status==='confirmado'?i.adultos:'',i.status==='confirmado'?(i.ninos||[]).length:'',(i.ninos||[]).join(' | '),s?tm(s.starts_at):'',i.comentario,i.checked_in_at?tm(i.checked_in_at):'']; }));
+  const csv = '﻿'+rows.map(r=>r.map(v=>{const s=String(v??''); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}).join(',')).join('\r\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='mustela-sessions-'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+};
+$('cfgForm').onsubmit = async e => {
+  e.preventDefault();
+  const { error } = await sb.from('ses_event').update({ nombre:$('c-nombre').value.trim()||'Mustela Sessions', lugar:$('c-lugar').value.trim(), direccion:$('c-dir').value.trim(), mensaje:$('c-msg').value.trim(), abierto:$('c-open').checked }).eq('id',1);
+  if (error) return toast(errMsg(error)); toast('Ajustes guardados'); await loadAll();
+};
+
+async function start(){
+  const { data } = await sb.auth.getSession();
+  const ok = data.session && await rpc('is_staff').catch(()=>false);
+  $('loginForm').hidden = !!ok; $('app').hidden = !ok; $('tabs').hidden = !ok; $('who').hidden = !ok;
+  if (!ok) return;
+  $('whoEmail').textContent = data.session.user.email;
+  try { await loadAll(); } catch (ex) { toast(errMsg(ex)); }
+  sb.channel('ses').on('postgres_changes',{event:'*',schema:'public',table:'ses_invites'},()=>loadAll().catch(()=>{})).subscribe();
+  setInterval(()=>loadAll().catch(()=>{}), 20000);
+}
+$('loginForm').onsubmit = async e => {
+  e.preventDefault();
+  const { error } = await sb.auth.signInWithPassword({ email:$('l-email').value.trim(), password:$('l-pass').value });
+  if (error) { $('loginErr').textContent='Correo o contraseña incorrectos.'; $('loginErr').hidden=false; return; }
+  start();
+};
+$('logout').onclick = async () => { await sb.auth.signOut(); location.reload(); };
+(function(){ const img=new Image(); img.onload=()=>document.querySelectorAll('.logo-slot').forEach(el=>{ el.textContent=''; const i=img.cloneNode(); i.alt='Mustela'; el.appendChild(i); }); img.src='assets/logo.svg'; })();
+start();
+</script>
+</body>
+</html>

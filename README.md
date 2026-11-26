@@ -60,3 +60,10 @@ echo "export { createClient } from '@supabase/supabase-js';" > entry.js
 npx esbuild entry.js --bundle --format=esm --minify --outfile=vendor/supabase-<ver>.js
 ```
 Then update the import at the top of `app.js`.
+
+## Mustela Sessions (RSVP + horario de fotos)
+
+- Run `supabase/014_sesiones.sql` once. It creates the event, 12 slots (Dec 4 2026, 9:00–14:00, 25 min, 1 family each) and 20 personal invitations.
+- Staff admin: `/sesiones-admin` (same staff login). Copy each link or send it by WhatsApp; add an internal note per link if useful.
+- Guest page: `/sesiones?c=CODE`. Guests confirm or decline, give name, WhatsApp, adults, kids + ages, and pick a free slot. If none is free they go to the waitlist.
+- Day of: type the guest's code in "Registrar llegada" or tap "Llegó" in the agenda.
